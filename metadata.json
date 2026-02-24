@@ -1,0 +1,9 @@
+{
+  "name": "Leila OS - Intelligent Assistant Hub",
+  "description": "A professional personal assistant application designed for Sergey. Leila acts as the primary orchestrator, managing specialized subordinate bots for Finance, Accounting, Creative, Development, and Marketing tasks.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
