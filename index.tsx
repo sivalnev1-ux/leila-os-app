@@ -2,6 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import App from './App';
+import { registerSW } from 'virtual:pwa-register';
+
+if ("serviceWorker" in navigator) {
+  registerSW({ immediate: true });
+}
 
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 

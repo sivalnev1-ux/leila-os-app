@@ -12,7 +12,7 @@ const IntegrationsPanel: React.FC = () => {
   const [activeStep, setActiveStep] = useState(1);
 
   useEffect(() => {
-    setApiKeyStatus(!!process.env.API_KEY);
+    setApiKeyStatus(!!import.meta.env.VITE_GOOGLE_CLIENT_ID);
     checkConnection();
   }, []);
 
@@ -47,7 +47,7 @@ const IntegrationsPanel: React.FC = () => {
       console.error(errorResponse);
       setVerificationResult({ success: false, message: "Ошибка авторизации Google" });
     },
-    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets',
+    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events',
   });
 
   const handleDisconnect = () => {

@@ -1,10 +1,13 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Hash, ShieldCheck, Clock, RefreshCw, MessageSquare, Kanban, Paperclip, File as FileIcon, Image as ImageIcon, ChevronLeft, LayoutDashboard, X, User, Mic, MicOff, Trash2, HardDrive, Database, Check, FolderOpen, Activity, Cpu } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
+import { Trash2, User, ChevronLeft, Calendar as CalendarIcon, PhoneOff, Cpu, HardDrive, Paperclip, CheckSquare, ListTodo, ShieldCheck, FileIcon, Search, PlusCircle, CreditCard, Inbox, CheckCircle2, FileText, Send, Kanban, MessageSquare, Briefcase, Zap, X, BrainCircuit, Sparkles, Mic, Lightbulb, MicOff, LayoutDashboard, Clock } from 'lucide-react';
 import { Department, Message, ViewMode, Task, Attachment } from './types';
 import { geminiService } from './services/geminiService';
 import { driveService } from './services/driveService';
 import { sheetsService } from './services/sheetsService';
+import { calendarService } from './services/calendarService';
+import { liveService } from './services/liveService';
+import { processImageWithPhotoroom } from './services/imageService';
 import { LEILA_AVATAR_URL, LINKED_WORKSPACES, DEPARTMENT_BOTS, getBotIcon, FINANCE_SPREADSHEET_ID } from './constants';
 import DepartmentSidebar from './components/DepartmentSidebar';
 import ChatMessage from './components/ChatMessage';
@@ -96,9 +99,22 @@ const App: React.FC = () => {
 
   const [isTyping, setIsTyping] = useState(false);
   const [isAccessingDrive, setIsAccessingDrive] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
+  // Directly in App.tsx so it's impossible to miss
+  const loginWithGoogle = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      driveService.setAccessToken(tokenResponse.access_token);
+      const result = await driveService.verifyConnection();
+      setIsDriveLive(result.success);
+    },
+    onError: errorResponse => console.error(errorResponse),
+    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events',
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -126,14 +142,21 @@ const App: React.FC = () => {
 
   // Persistence Effects
   useEffect(() => {
-    // Strip heavy base64 data before saving history to localStorage
-    const lightweightMessages = messages.map(msg => {
-      if (!msg.attachments || msg.attachments.length === 0) return msg;
-      return {
-        ...msg,
-        attachments: msg.attachments.map(att => ({ ...att, data: '', url: '' })) // clear heavy data AND url
-      };
-    });
+    // Strip heavy base64 data only when history gets too large to prevent QuotaExceededError
+    let lightweightMessages = messages;
+    try {
+      const testStr = JSON.stringify(messages);
+      if (testStr.length > 3000000) { // arbitrary safe limit for 5MB localStorage
+        lightweightMessages = messages.map(msg => {
+          if (!msg.attachments || msg.attachments.length === 0) return msg;
+          return {
+            ...msg,
+            attachments: msg.attachments.map(att => ({ ...att, data: '', url: '' })) // clear heavy data
+          };
+        });
+      }
+    } catch (e) { }
+
     saveToStorage(STORAGE_KEYS.MESSAGES, lightweightMessages);
   }, [messages, saveToStorage]);
 
@@ -152,45 +175,47 @@ const App: React.FC = () => {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { if (viewMode === 'chat') scrollToBottom(); }, [messages, isTyping, viewMode]);
 
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
+  const toggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Распознавание речи не поддерживается в этом браузере.");
-      return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = (reader.result as string).split(',')[1];
+          setAttachments(prev => [...prev, {
+            name: `voice_message_${Date.now()}.webm`,
+            mimeType: 'audio/webm',
+            data: base64Data,
+            url: reader.result as string
+          }]);
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      alert("Не удалось получить доступ к микрофону.");
     }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ru-RU';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-    };
-
-    recognition.onresult = (event: any) => {
-      let currentTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript;
-      }
-      if (currentTranscript) {
-        setInput(prev => {
-          // We append or set depending on your preference, but here we set interim results
-          return currentTranscript;
-        });
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
   };
 
   const clearHistory = () => {
@@ -225,7 +250,10 @@ const App: React.FC = () => {
 
   const handleSend = async (overrideInput?: string, overrideHiddenPrompt?: string) => {
     let textToSend = overrideInput !== undefined ? overrideInput : input;
-    if (isListening) recognitionRef.current?.stop();
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+    }
 
     const isManualSend = overrideInput === undefined;
     if (!textToSend.trim() && attachments.length === 0) return;
@@ -250,134 +278,156 @@ const App: React.FC = () => {
       setInput('');
       setAttachments([]);
     }
+
     setIsTyping(true);
-
-    let toolResponses: any[] = [];
     let promptForModel = overrideHiddenPrompt || textToSend;
-
-    try {
-      let history = messages.filter(m => m.role !== 'system').map(m => ({
-        role: m.role === 'user' ? 'user' as const : 'model' as const,
-        parts: [{ text: m.content }] // Note: History currently simplifies to text only, can be expanded for MM history later
-      })).slice(-20);
-
-      // Pass the text AND attachments to the service
-      let response = await geminiService.sendMessage(promptForModel, currentAttachments, history, currentDept, processedReceipts);
+    const executeBotRequest = async (
+      promptText: string,
+      attachs: any[],
+      hist: any[],
+      dept: Department,
+      isSubTask = false
+    ): Promise<string> => {
+      let response = await geminiService.sendMessage(promptText, attachs, hist, dept, processedReceipts);
+      let toolResponses: any[] = [];
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         setIsAccessingDrive(true);
-
         for (const fc of response.functionCalls) {
-          let result;
+          let result: any = null;
+
           if (fc.name === 'list_drive_files') {
-            const query = (fc.args?.query || input).toLowerCase();
-            result = await driveService.listFiles(query, currentDept);
+            const query = ((fc.args?.query as string) || promptText).toLowerCase();
+            result = await driveService.listFiles(query, dept);
           } else if (fc.name === 'create_drive_file') {
-            const base64Data = currentAttachments.length > 0 ? currentAttachments[0].data : undefined;
+            const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
             result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data);
           } else if (fc.name === 'insert_into_sheet') {
-            // Track successful receipts logic
             const receipt_num = fc.args.receipt_number || '';
             const supplier = fc.args.supplier || '';
             if (receipt_num && supplier) {
-              const uniqueKey = `${receipt_num}_${supplier}`;
+              const uniqueKey = `${receipt_num}_${supplier} `;
               setProcessedReceipts(prev => [...new Set([...prev, uniqueKey])]);
             }
-
-            // Pass the arguments as an array matching the exact columns in the user's sheet:
-            // A: timestamp, B: file_id, C: file_name, D: supplier, E: product_name, F: quantity, G: price, H: cost, I: margin, J: date, K: category, L: notes
             const timestamp = new Date().toLocaleString('ru-RU');
             const rowValues = [
-              timestamp,                                // A: timestamp
-              receipt_num,                              // B: file_id -> now receipt_number
-              fc.args.file_name || 'Распознано из чата',// C: file_name
-              supplier,                                 // D: supplier
-              fc.args.product_name || '',               // E: product_name
-              fc.args.quantity || 1,                    // F: quantity
-              fc.args.price || fc.args.cost || 0,       // G: price
-              fc.args.cost || 0,                        // H: cost
-              fc.args.margin || '',                     // I: margin
-              fc.args.date || timestamp.split(',')[0],  // J: date
-              fc.args.category || '',                   // K: category
-              fc.args.notes || ''                       // L: notes
+              timestamp, receipt_num, fc.args.file_name || 'Распознано',
+              supplier, fc.args.product_name || '', fc.args.quantity || 1,
+              fc.args.price || fc.args.cost || 0, fc.args.cost || 0,
+              fc.args.margin || '', fc.args.date || timestamp.split(',')[0],
+              fc.args.category || '', fc.args.notes || ''
             ];
-            // Explicitly write to the 'parsed_data' tab
             result = await sheetsService.appendRow(FINANCE_SPREADSHEET_ID, rowValues, 'parsed_data!A1');
           } else if (fc.name === 'create_task') {
             const newTask = {
               id: Math.random().toString(),
               title: fc.args.title as string,
               status: (fc.args.status as string) || 'todo',
-              department: (fc.args.department as string) || currentDept,
+              department: (fc.args.department as string) || dept,
               createdAt: Date.now()
             };
             setTasks(prev => [newTask, ...prev]);
             result = { status: 'success', message: `Task "${newTask.title}" created successfully.` };
+          } else if (fc.name === 'list_calendar_events') {
+            result = await calendarService.getUpcomingEvents(fc.args.timeMin as string, fc.args.timeMax as string);
+          } else if (fc.name === 'create_calendar_event') {
+            result = await calendarService.createEvent(fc.args.summary as string, fc.args.date as string, (fc.args.description as string) || '');
+          } else if (fc.name === 'delegate_task') {
+            const targetAgent = (fc.args.target_agent || Department.FINANCE) as Department;
+            const desc = fc.args.task_description as string;
+
+            setMessages(prev => [...prev, {
+              id: Date.now().toString() + Math.random(),
+              role: 'system',
+              content: `🔄 ** Оркестратор делегирует задачу отделу ${targetAgent.toUpperCase()}**: \n * ${desc}* `,
+              department: Department.GENERAL,
+              timestamp: Date.now()
+            }]);
+
+            // Execute sub-request (with empty history so it focuses purely on the delegated task)
+            const subResultText = await executeBotRequest(desc, attachs, [], targetAgent, true);
+            result = { status: 'success', sub_agent_report: subResultText };
+          } else if (fc.name === 'process_product_image') {
+            const index = fc.args.image_index as number;
+            const customPrompt = fc.args.prompt as string | undefined;
+            if (attachs && attachs[index]) {
+              try {
+                const processedBase64 = await processImageWithPhotoroom(attachs[index].data, customPrompt);
+                // Return a success message back to Gemini WITHOUT the heavy base64 string to avoid hitting the 1M token limit
+                result = { status: 'success', message: 'Обработка завершена: белый студийный фон, тени, AI-ретушь. Картинка добавлена в чат.' };
+
+                // Add the processed image directly to the chat as a system message
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString() + Math.random(),
+                  role: 'assistant',
+                  content: `🔮 ** LensPerfect AI ** обработал фотографию: `,
+                  department: Department.WIX,
+                  timestamp: Date.now(),
+                  attachments: [{ name: 'lensperfect_result.jpg', mimeType: 'image/jpeg', url: `data:image/jpeg;base64,${processedBase64}`, data: processedBase64 }]
+                }]);
+              } catch (err: any) {
+                result = { status: 'error', message: `Ошибка API: ${err.message} ` };
+              }
+            } else {
+              result = { status: 'error', message: 'Изображение с указанным индексом не найдено во вложениях.' };
+            }
           }
 
           toolResponses.push({ functionResponse: { name: fc.name, id: fc.id, response: { result } } });
         }
 
         const finalResponse = await geminiService.sendToolResponse(
-          [...history, { role: 'user', parts: [{ text: promptForModel }] }, { role: 'model', parts: response.candidates[0].content.parts }],
+          [...hist, { role: 'user', parts: [{ text: promptText }] }, { role: 'model', parts: response.candidates?.[0]?.content?.parts || [] }],
           toolResponses,
-          currentDept
+          dept
         );
         response = finalResponse;
-        setIsAccessingDrive(false);
       }
 
       let responseText = '';
       try { responseText = response.text; } catch (e) { }
 
-
-      if (!responseText && toolResponses && toolResponses.length > 0) {
+      if (!responseText && toolResponses.length > 0) {
         const insertSheetCalls = toolResponses.filter(t => t.functionResponse.name === 'insert_into_sheet');
-
         if (insertSheetCalls.length > 0) {
           const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
           const failCount = insertSheetCalls.length - successCount;
-
-          if (successCount > 0 && failCount === 0) {
-            responseText = `✅ Успешно обработано и добавлено в Google Таблицу документов: **${successCount}** шт.`;
-          } else if (successCount > 0 && failCount > 0) {
-            responseText = `⚠️ Обработка завершена частично. Успешно: ${successCount}. Ошибок: ${failCount}.`;
-          } else {
-            responseText = `❌ Ошибка при пакетной записи в таблицу. Проверьте консоль.`;
-          }
+          responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в Таблицу: ** ${successCount}** шт.` : `⚠️ Успешно: ${successCount}.Ошибок: ${failCount}.`;
         } else {
-          // If it's list_drive_files or other tool
           const lastTool = toolResponses[toolResponses.length - 1];
           if (lastTool.functionResponse.name === 'list_drive_files') {
-            const files = lastTool.functionResponse.response.result.files;
-            if (files && files.length > 0) {
-              responseText = `📂 ${lastTool.functionResponse.response.result.source === 'REAL_API' ? 'Реальные файлы' : 'Симуляция'} на Диске:\n` +
-                files.map((f: any) => {
-                  const icon = f.mimeType.includes('folder') ? '📁' : '📄';
-                  return `${icon} ${f.name} ${f.size ? `(${f.size})` : ''}`;
-                }).join('\n');
-            } else {
-              responseText = lastTool.functionResponse.response.result.message || "📂 Файлы не найдены.";
-            }
-          } else if (lastTool.functionResponse.name === 'create_task') {
-            responseText = `✅ Задача успешно добавлена на доску.`;
+            const files = lastTool.functionResponse.response.result?.files;
+            responseText = files?.length > 0 ? `📂 Найдено файлов: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 Файлы не найдены.";
+          } else if (lastTool.functionResponse.name === 'delegate_task') {
+            responseText = `✅ Субагент завершил работу: \n${lastTool.functionResponse.response.result?.sub_agent_report} `;
           } else {
-            responseText = "✅ Команды выполнены.";
+            responseText = "✅ Ограниченная команда выполнена.";
           }
         }
       }
 
+      return responseText || 'Команда выполнена успешно.';
+    };
+
+    try {
+      let history = messages.filter(m => m.role !== 'system').map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'model' as const,
+        parts: [{ text: m.content }]
+      })).slice(-20);
+
+      const finalResponseText = await executeBotRequest(promptForModel, currentAttachments, history, Department.GENERAL);
+
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: responseText || 'Команда выполнена успешно.',
-        department: currentDept,
+        content: finalResponseText,
+        department: Department.GENERAL,
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       console.error(err);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Ошибка: ${err?.message || 'Неизвестный сбой (см. консоль)'}`, department: currentDept, timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Ошибка: ${err?.message || 'Неизвестный сбой (см. консоль)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
     } finally {
       setIsTyping(false);
       setIsAccessingDrive(false);
@@ -400,15 +450,15 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'system',
-        content: `*(Система: Голосовой сеанс завершен. Лог стенограммы оказался пуст. Либо вы молчали, либо браузер не расслышал команду).*`,
+        content: `* (Система: Голосовой сеанс завершен.Лог стенограммы оказался пуст.Либо вы молчали, либо браузер не расслышал команду).* `,
         department: currentDept,
         timestamp: Date.now()
       }]);
       return;
     }
 
-    const uiMessage = `*(Система: Обработка стенограммы аудиозвонка...)*\n\n**Записанный лог звонка:**\n${meetingText}`;
-    const hiddenPrompt = `Анализ только что завершенного голосового звонка (Live Session):\n\n${meetingText}\n\nИнструкция: Проанализируй эту стенограмму разговора. Выполни ВСЕ функции (создай задачи, сохрани события), которые ты пообещала сделать во время звонка. В чат выдай краткое резюме того, что было сохранено по итогам звонка. ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ. Если ничего сохранять не нужно было, просто скажи "Голосовой сеанс завершен без создания новых записей."`;
+    const uiMessage = `* (Система: Обработка стенограммы аудиозвонка...)*\n\n ** Записанный лог звонка:**\n${meetingText} `;
+    const hiddenPrompt = `Анализ только что завершенного голосового звонка(Live Session): \n\n${meetingText} \n\nИнструкция: Проанализируй эту стенограмму разговора.Выполни ВСЕ функции(создай задачи, сохрани события), которые ты пообещала сделать во время звонка.В чат выдай краткое резюме того, что было сохранено по итогам звонка.ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.Если ничего сохранять не нужно было, просто скажи "Голосовой сеанс завершен без создания новых записей."`;
 
     handleSend(uiMessage, hiddenPrompt);
   };
@@ -485,8 +535,8 @@ const App: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={isListening ? 'Слушаю вас...' : `Ваше поручение для ${currentBot?.name || 'Лейлы'} (Ctrl+Enter)...`}
-                  className={`w-full bg-neutral-900/40 border transition-all duration-300 rounded-[2rem] py-5 pl-8 pr-44 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none glass border-white/10 ${isListening ? 'ring-2 ring-indigo-500/30' : ''}`}
+                  placeholder={isRecording ? 'Запись аудио... Отпустите или нажмите отправить.' : `Ваше поручение для Лейлы(Ctrl + Enter)...`}
+                  className={`w-full bg-neutral-900/40 border transition-all duration-300 rounded-[2rem] py-5 pl-8 pr-44 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none glass border-white/10 ${isRecording ? 'ring-2 ring-red-500/50' : ''}`}
                   style={{ maxHeight: '200px', minHeight: '68px' }}
                 />
 
@@ -518,11 +568,11 @@ const App: React.FC = () => {
                     <Paperclip size={18} />
                   </button>
                   <button
-                    onClick={toggleListening}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border border-white/5 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-neutral-800/50 text-neutral-400 hover:text-white hover:bg-neutral-700 hover:scale-105 active:scale-95'}`}
-                    title={isListening ? "Остановить запись" : "Голосовой ввод"}
+                    onClick={toggleRecording}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border border-white/5 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-neutral-800/50 text-neutral-400 hover:text-white hover:bg-neutral-700 hover:scale-105 active:scale-95'}`}
+                    title={isRecording ? "Остановить запись" : "Голосовой ввод (Голосовое сообщение)"}
                   >
-                    {isListening ? <Mic size={18} /> : <Mic size={18} />}
+                    {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
                   </button>
                   <button
                     onClick={() => handleSend()}
@@ -548,7 +598,7 @@ const App: React.FC = () => {
   const liveContextPayload = `
 ТЕКУЩИЙ СПИСОК ЗАДАЧ СЕРГЕЯ В СИСТЕМЕ:
 ${tasks.length === 0 ? 'Задач пока нет.' : tasks.map(t => `- [${t.status}] ${t.title}`).join('\n')}
-  `.trim();
+`.trim();
 
   return (
     <div className="flex h-screen bg-[#050505] text-neutral-200 overflow-hidden relative font-inter">
@@ -587,6 +637,11 @@ ${tasks.length === 0 ? 'Задач пока нет.' : tasks.map(t => `- [${t.st
               <div className="flex items-center gap-2">
                 <HardDrive size={12} className={isDriveLive ? 'text-emerald-400' : 'text-neutral-600'} />
                 <span className={`text-[9px] font-black uppercase tracking-tighter ${isDriveLive ? 'text-emerald-400' : 'text-neutral-500'}`}>DRIVE: {isDriveLive ? 'LIVE' : 'SIMULATION'}</span>
+                {!isDriveLive && (
+                  <button onClick={() => loginWithGoogle()} className="ml-2 bg-indigo-600 text-white text-[9px] px-2 py-0.5 rounded-md hover:bg-indigo-500 transition-all font-bold flex items-center gap-1 shadow-[0_0_10px_rgba(79,70,229,0.4)]">
+                    <ShieldCheck size={10} /> ВОЙТИ
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-white/5 backdrop-blur-md">

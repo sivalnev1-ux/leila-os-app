@@ -18,6 +18,20 @@ const listDriveFilesTool: FunctionDeclaration = {
   },
 };
 
+const delegateTaskTool: FunctionDeclaration = {
+  name: 'delegate_task',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Делегирование сложной специализированной задачи профильному субагенту (отделу). ВЫЗЫВАЙ ЭТУ ФУНКЦИЮ всегда, когда запрос касается финансов (чеки, расходы, счета, накладные - отдел finance), программирования/R&D (код, сложные архитектуры - отдел inventor) или управления сайтом (каталог Wix - отдел wix). ТЫ НЕ ДОЛЖНА ДЕЛАТЬ ИХ РАБОТУ САМА. Передай им поручение и дождись ответа.',
+    properties: {
+      target_agent: { type: Type.STRING, description: 'ID субагента: finance, inventor, wix, development' },
+      task_description: { type: Type.STRING, description: 'ПОДРОБНАЯ инструкция для субагента, что именно он должен сделать (включая все детали из оригинального запроса пользователя).' }
+    },
+    required: ['target_agent', 'task_description'],
+  },
+};
+
+
 const createTaskTool: FunctionDeclaration = {
   name: 'create_task',
   parameters: {
@@ -46,6 +60,33 @@ const createDriveFileTool: FunctionDeclaration = {
   },
 };
 
+const listCalendarEventsTool: FunctionDeclaration = {
+  name: 'list_calendar_events',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Поиск и получение списка предстоящих событий из Google Календаря.',
+    properties: {
+      timeMin: { type: Type.STRING, description: 'Дата начала в формате ISO (e.g. 2024-03-20T00:00:00Z)' },
+      timeMax: { type: Type.STRING, description: 'Дата окончания в формате ISO (e.g. 2024-03-25T23:59:59Z)' },
+    },
+    required: ['timeMin', 'timeMax'],
+  },
+};
+
+const createCalendarEventTool: FunctionDeclaration = {
+  name: 'create_calendar_event',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Создание нового события (встречи, напоминания, записи о сходе чека) в Google Календаре.',
+    properties: {
+      summary: { type: Type.STRING, description: 'Заголовок события (например, "Сход чека: 5000₪ [Поставщик]")' },
+      date: { type: Type.STRING, description: 'Дата события. Если на весь день, формат YYYY-MM-DD. Если точное время, формат ISO (e.g. "2024-03-20T15:00:00Z")' },
+      description: { type: Type.STRING, description: 'Подробное описание события (опционально)' }
+    },
+    required: ['summary', 'date'],
+  },
+};
+
 const insertIntoSheetTool: FunctionDeclaration = {
   name: 'insert_into_sheet',
   parameters: {
@@ -64,7 +105,20 @@ const insertIntoSheetTool: FunctionDeclaration = {
       category: { type: Type.STRING, description: 'Категория расхода' },
       notes: { type: Type.STRING, description: 'Дополнительные заметки' }
     },
-    required: ['supplier', 'cost', 'date', 'receipt_number'],
+    required: ['receipt_number', 'supplier', 'product_name', 'price'],
+  },
+};
+
+const processProductImageTool: FunctionDeclaration = {
+  name: 'process_product_image',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Передает фото товара в LensPerfect AI (Photoroom v2). Модуль автоматически: вырезает фон, ставит идеальный белый студийный фон, центрирует (padding) и добавляет профессиональную 3D-тень от источника света. Возвращает JPEG. Используй для красивых карточек товаров!',
+    properties: {
+      image_index: { type: Type.INTEGER, description: 'Индекс прикрепленного изображения в массиве attachments (начиная с 0), фон которого нужно удалить.' },
+      prompt: { type: Type.STRING, description: 'Опционально, НО СТРОГО ОБЯЗАТЕЛЬНО при подготовке товаров для каталога. Текст генеративного промпта. Всегда передавай: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"' }
+    },
+    required: ['image_index'],
   },
 };
 
@@ -78,27 +132,54 @@ export class GeminiService {
   ) {
     try {
       const isInventor = department === Department.INVENTOR;
-      const modelName = isInventor ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
+      const modelName = isInventor ? "gemini-3-pro-preview" : "gemini-2.5-flash";
 
       let deptContext = `\nТЕКУЩИЙ КОНТЕКСТ: Отдел ${department}. Тон деловой, секретарь-адъютант.`;
 
       if (department === Department.FINANCE) {
         deptContext += `\nФУНКЦИЯ OCR (РАСПОЗНАВАНИЕ ТЕКСТА): Если пользователь прикрепляет изображение чека/квитанции, твоя задача — автоматически распознать текст и извлечь данные. ВАЖНО: НИКОГДА НЕ ОБЪЕДИНЯЙ ТОВАРЫ В ОБЩУЮ СУММУ ЧЕКА! Ты ОБЯЗАНА вытащить КАЖДУЮ ОТДЕЛЬНУЮ ПОЗИЦИЮ из чека (каждый уникальный товар, вкус, вид, количество, цену) и вызвать функцию \`insert_into_sheet\` для КАЖДОЙ ПОЗИЦИИ отдельно новой строкой! Если в накладной 10 разных кормов, ты должна вызвать функцию 10 раз, чтобы пользователь мог вести точную аналитику по конкретным товарам.`;
+        deptContext += `\nФИНАНСОВЫЙ КАЛЕНДАРЬ (CASH FLOW): Если в документе (например, в чеке или счете) указана дата БУДУЩЕГО платежа (отложенный чек, рассрочка, дата оплаты накладной), ты ОБЯЗАНА записать это не только в Таблицу, но И создать событие в Календаре (create_calendar_event) на эту дату, чтобы Сергий видел ожидаемый расход/доход. В названии события пиши сумму и получателя, например "Сход чека: 1540₪ [Reflex]".`;
 
         if (processedReceipts.length > 0) {
           deptContext += `\nСПИСОК УЖЕ ОБРАБОТАННЫХ ЧЕКОВ (Формат: НомерДокумента_Поставщик): [${processedReceipts.join(', ')}]. ВАЖНО: На каждом чеке найди "Номер документа" (חשבונית מס) и "Поставщика" (supplier). Составь из них ключ вида "Номер_Поставщик". Если этот ключ ЕСТЬ в Списке, это значит файл - дубликат! ДЛЯ ДУБЛИКАТОВ СТРОГО ЗАПРЕЩАЕТСЯ вызывать функцию insert_into_sheet. Вместо этого для дубликата ты ОБЯЗАНА вызвать функцию "create_drive_file" (name="ДУБЛИКАТ_<НомерДокумента>_<Поставщик>", mimeType="image/jpeg"), чтобы отложить этот чек в Google Drive для ручной проверки. В ответе пользователю напиши, что чек дубликат и отложен.`;
         } else {
           deptContext += `\nОБРАБОТКА ДУБЛИКАТОВ: Всегда находи "Номер документа" (חשבונית מס) и "Поставщика" (supplier). Если ты точно уверена по тексту сообщения, что этот файл - дубликат, используй create_drive_file для загрузки его на Диск с именем "ДУБЛИКАТ_<НомерДокумента>_<Поставщик>".`;
         }
+      } else if (department === Department.WIX) {
+        deptContext += `\nТВОЯ РОЛЬ: Ты — Гениальный Копирайтер и Контент-Менеджер для интернет-магазина (Bonnie Market, зоотовары). Твоя задача — анализировать фотографии товаров (от 1 до 5 шт), извлекать факты и создавать идеальные карточки товаров для каталога Wix.
+        
+ПРАВИЛА ДЛЯ ОПИСАНИЙ ТОВАРОВ:
+1. Заголовок: Продающий, точный, с ключевыми словами.
+2. Маркетинговое описание: Сочное, вкусное, закрывающее боли клиента. Никакой воды, только польза и эмоции. Почему этот товар особенный?
+3. Характеристики: Сформируй четкий маркированный список фактов (Вес, Вкус, Возраст, Состав).
+4. Подготовка данных: Если пользователь просит таблицу для импорта, выдавай строгий CSV-формат, совместимый с Wix Stores (с колонками handle, name, description, price, sku и т.д.).
+5. ФОТОГРАФИИ (АВТОМАТИЗАЦИЯ LensPerfect AI): Если пользователь загрузил фото товара для каталога, ТЫ ОБЯЗАНА вызвать инструмент \`process_product_image\` (передав индекс картинки) для подготовки чистой идеальной карточки. 
+ВАЖНО: При каждом вызове \`process_product_image\` ВСЕГДА передавай в аргумент 'prompt' следующий текст, чтобы нейросеть выровняла товар, убрала блики и разгладила складки: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare".
+Укажи в ответе пользователю, что "Фото обработано LensPerfect AI: выпрямлено, убраны блики и складки, добавлен студийный свет".`;
       }
 
-      // Prioritizing Function Declarations for Drive management.
-      const tools: any[] = [{ functionDeclarations: [listDriveFilesTool, createDriveFileTool, insertIntoSheetTool, createTaskTool] }];
+      let tools: any[] = [];
+      if (department === Department.GENERAL) {
+        // Master Orchestrator: can delegate, list files, create tasks.
+        tools = [{ functionDeclarations: [delegateTaskTool, listDriveFilesTool, createTaskTool, listCalendarEventsTool, createCalendarEventTool, processProductImageTool] }];
+        deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя. \nОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
+      } else {
+        // Sub-agents get specific execution tools
+        const agentTools = [];
+        if (department === Department.FINANCE) agentTools.push(insertIntoSheetTool, createDriveFileTool, listCalendarEventsTool, createCalendarEventTool);
+        else if (department === Department.INVENTOR || department === Department.DEVELOPMENT) agentTools.push(listDriveFilesTool, createDriveFileTool);
+        else if (department === Department.WIX) agentTools.push(processProductImageTool, createDriveFileTool);
+
+        if (agentTools.length > 0) {
+          tools = [{ functionDeclarations: agentTools }];
+        }
+      }
 
       const config: any = {
         systemInstruction: LEILA_SYSTEM_INSTRUCTION + deptContext,
-        tools: tools
+        tools: tools.length > 0 ? tools : undefined
       };
+
 
       if (isInventor) {
         config.thinkingConfig = { thinkingBudget: 8192 };
@@ -139,11 +220,12 @@ export class GeminiService {
 
   async sendToolResponse(history: any[], toolResults: any, department: Department) {
     try {
-      const modelName = department === Department.INVENTOR ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
+      const modelName = department === Department.INVENTOR ? "gemini-3-pro-preview" : "gemini-2.5-flash";
       const response = await ai.models.generateContent({
         model: modelName,
         contents: [...history, { role: 'user', parts: toolResults }] as any,
-        config: { systemInstruction: LEILA_SYSTEM_INSTRUCTION }
+        // When sending tool responses back, usually the config context needs to be preserved if we want role consistency
+        config: { systemInstruction: LEILA_SYSTEM_INSTRUCTION + `\nТЕКУЩИЙ КОНТЕКСТ: Отдел ${department}. Тон деловой, секретарь-адъютант.` }
       });
       return response;
     } catch (error) {

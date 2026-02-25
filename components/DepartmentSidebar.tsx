@@ -76,21 +76,17 @@ const DepartmentSidebar: React.FC<DepartmentSidebarProps> = ({ currentDept, view
         </div>
 
         <div>
-          <p className="text-[10px] font-semibold text-neutral-500 uppercase ml-2 mb-2 tracking-widest">Expert Bots</p>
+          <p className="text-[10px] font-semibold text-neutral-500 uppercase ml-2 mb-2 tracking-widest">Team Availability</p>
           <div className="space-y-1">
             {DEPARTMENT_BOTS.map((bot) => (
-              <button
+              <div
                 key={bot.id}
-                onClick={() => {
-                  onSelectDept(bot.id);
-                  if (['live', 'integrations', 'analytics'].includes(viewMode)) onSelectView('chat');
-                }}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group ${currentDept === bot.id && (viewMode === 'chat' || viewMode === 'tasks')
-                  ? 'bg-white/10 text-white border border-white/5'
-                  : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-200'
+                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group ${bot.id === Department.GENERAL
+                  ? 'bg-white/5 text-white border border-white/10'
+                  : 'text-neutral-400'
                   }`}
               >
-                <div className={`w-10 h-10 rounded-xl overflow-hidden shadow-lg transition-transform group-hover:scale-105 ${currentDept === bot.id ? 'border-2 border-indigo-500' : 'border border-white/10'}`}>
+                <div className={`w-10 h-10 rounded-xl overflow-hidden shadow-lg border border-white/10`}>
                   {bot.avatarUrl ? (
                     <img
                       src={bot.avatarUrl}
@@ -98,16 +94,19 @@ const DepartmentSidebar: React.FC<DepartmentSidebarProps> = ({ currentDept, view
                       className="w-full h-full object-cover object-top"
                     />
                   ) : (
-                    <div className={`w-full h-full flex items-center justify-center ${bot.color} text-white`}>
+                    <div className={`w-full h-full flex items-center justify-center ${bot.color} text-white opacity-80`}>
                       {getBotIcon(bot.id, 18)}
                     </div>
                   )}
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <div className="text-sm font-semibold truncate max-w-[120px]">{bot.name}</div>
-                  <div className="text-[9px] text-neutral-500 font-bold uppercase tracking-tighter">AI Node Online</div>
+                  <div className="text-[9px] text-neutral-500 font-bold uppercase tracking-tighter flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                    Online
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>

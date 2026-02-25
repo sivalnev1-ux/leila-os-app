@@ -22,11 +22,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState(TEAM_MEMBERS[0].id);
 
-  const filteredTasks = tasks.filter(t => t.department === department);
+  // In Orchestrator mode, the Master board sees all tasks from all departments
+  const filteredTasks = tasks;
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -72,7 +73,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
 
   const handleUpdateTaskDetails = () => {
     if (!editingTask || !editingTask.title.trim()) return;
-    
+
     const originalTask = tasks.find(t => t.id === editingTask.id);
     if (originalTask && originalTask.status !== editingTask.status) {
       if (!checkPrerequisites(editingTask, editingTask.status)) return;
@@ -99,8 +100,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
   const togglePrerequisite = (id: string) => {
     if (!editingTask) return;
     const current = editingTask.prerequisiteIds || [];
-    const updated = current.includes(id) 
-      ? current.filter(pid => pid !== id) 
+    const updated = current.includes(id)
+      ? current.filter(pid => pid !== id)
       : [...current, id];
     setEditingTask({ ...editingTask, prerequisiteIds: updated });
   };
@@ -129,7 +130,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
           </h2>
           <p className="text-xs text-neutral-500 mt-1">Управление проектами и поручениями отдела</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-indigo-600/20"
         >
@@ -150,7 +151,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
               </div>
               <button className="text-neutral-500 hover:text-neutral-300"><MoreVertical size={14} /></button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {filteredTasks.filter(t => t.status === col.id).map(task => {
                 const assignee = getAssignee(task.assigneeId);
@@ -159,8 +160,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                 const progress = calculateProgress(task.actualTime, task.estimatedTime);
 
                 return (
-                  <div 
-                    key={task.id} 
+                  <div
+                    key={task.id}
                     onClick={() => { setEditingTask({ ...task }); setError(null); }}
                     className={`bg-neutral-800/40 border border-white/5 rounded-xl p-4 hover:border-white/20 hover:bg-neutral-800/60 transition-all group cursor-pointer active:scale-[0.98] ${isLocked ? 'opacity-80' : ''}`}
                   >
@@ -178,7 +179,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {col.id !== 'done' && (
-                          <button 
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               const nextStatus: Record<TaskStatus, TaskStatus> = {
@@ -200,7 +201,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                       </div>
                     </div>
                     <h4 className="text-sm font-medium text-neutral-200 leading-snug mb-2">{task.title}</h4>
-                    
+
                     {task.estimatedTime && task.estimatedTime > 0 && (
                       <div className="mb-3">
                         <div className="flex justify-between items-center text-[9px] text-neutral-500 uppercase font-bold tracking-widest mb-1">
@@ -208,8 +209,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                           <span>{progress}%</span>
                         </div>
                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-indigo-500 transition-all duration-500" 
+                          <div
+                            className="h-full bg-indigo-500 transition-all duration-500"
                             style={{ width: `${progress}%` }}
                           />
                         </div>
@@ -223,17 +224,17 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                     )}
                     <div className="flex items-center justify-between mt-auto">
                       <div className="flex items-center gap-3">
-                         <div className="flex items-center gap-1.5 text-neutral-500 text-[10px]">
-                           <Clock size={12} />
-                           {new Date(task.createdAt).toLocaleDateString()}
-                         </div>
-                         {task.estimatedTime && task.estimatedTime > 0 && (
-                           <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-bold">
-                             <Timer size={12} /> {task.actualTime || 0}/{task.estimatedTime}h
-                           </div>
-                         )}
+                        <div className="flex items-center gap-1.5 text-neutral-500 text-[10px]">
+                          <Clock size={12} />
+                          {new Date(task.createdAt).toLocaleDateString()}
+                        </div>
+                        {task.estimatedTime && task.estimatedTime > 0 && (
+                          <div className="flex items-center gap-1 text-[10px] text-indigo-400 font-bold">
+                            <Timer size={12} /> {task.actualTime || 0}/{task.estimatedTime}h
+                          </div>
+                        )}
                       </div>
-                      <div 
+                      <div
                         title={assignee.name}
                         className={`w-7 h-7 rounded-full ${assignee.color} flex items-center justify-center text-[10px] font-bold text-white border border-white/10 shadow-sm`}
                       >
@@ -258,11 +259,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="space-y-5">
               <div>
                 <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1.5 block">Название</label>
-                <input 
+                <input
                   autoFocus
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                   placeholder="Что нужно сделать?"
@@ -279,11 +280,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                     <button
                       key={member.id}
                       onClick={() => setNewTaskAssignee(member.id)}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-xs ${
-                        newTaskAssignee === member.id 
-                          ? 'border-indigo-500 bg-indigo-500/10 text-white shadow-inner' 
+                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all text-xs ${newTaskAssignee === member.id
+                          ? 'border-indigo-500 bg-indigo-500/10 text-white shadow-inner'
                           : 'border-white/5 bg-neutral-900/50 text-neutral-400 hover:border-white/10'
-                      }`}
+                        }`}
                     >
                       <div className={`w-5 h-5 rounded-full ${member.color} flex items-center justify-center text-[8px] font-bold text-white`}>
                         {member.avatarLabel}
@@ -296,13 +296,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
             </div>
 
             <div className="flex justify-end gap-3 mt-8">
-              <button 
+              <button
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white transition-colors"
               >
                 Отмена
               </button>
-              <button 
+              <button
                 onClick={handleAddTask}
                 className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all hover:scale-105 active:scale-95"
               >
@@ -319,18 +319,18 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
           <div className="glass w-full max-w-2xl rounded-2xl border-white/10 p-7 shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center mb-6 shrink-0">
               <div className="flex items-center gap-2">
-                 <div className={`w-3 h-3 rounded-full ${COLUMNS.find(c => c.id === editingTask.status)?.color}`} />
-                 <h3 className="text-lg font-bold text-white">Редактирование задачи</h3>
+                <div className={`w-3 h-3 rounded-full ${COLUMNS.find(c => c.id === editingTask.status)?.color}`} />
+                <h3 className="text-lg font-bold text-white">Редактирование задачи</h3>
               </div>
               <button onClick={() => setEditingTask(null)} className="text-neutral-500 hover:text-white transition-colors">
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scroll">
               <div>
                 <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1.5 block">Заголовок</label>
-                <input 
+                <input
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                   value={editingTask.title}
                   onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
@@ -339,9 +339,9 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
 
               <div>
                 <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1.5 block flex items-center gap-1">
-                   <AlignLeft size={10} /> Описание
+                  <AlignLeft size={10} /> Описание
                 </label>
-                <textarea 
+                <textarea
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all min-h-[100px] resize-none"
                   placeholder="Добавьте подробное описание..."
                   value={editingTask.description}
@@ -352,12 +352,12 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
               {/* Time Tracking Section */}
               <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                 <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-4 block flex items-center gap-1.5">
-                   <Timer size={12} /> Time Tracking & Progress
+                  <Timer size={12} /> Time Tracking & Progress
                 </label>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="text-[9px] font-medium text-neutral-500 mb-1.5 block">Оценка (часов)</label>
-                    <input 
+                    <input
                       type="number"
                       className="w-full bg-neutral-950 border border-white/10 rounded-xl p-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                       value={editingTask.estimatedTime || 0}
@@ -366,7 +366,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                   </div>
                   <div>
                     <label className="text-[9px] font-medium text-neutral-500 mb-1.5 block">Затрачено (часов)</label>
-                    <input 
+                    <input
                       type="number"
                       className="w-full bg-neutral-950 border border-white/10 rounded-xl p-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                       value={editingTask.actualTime || 0}
@@ -374,7 +374,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                     />
                   </div>
                 </div>
-                
+
                 {editingTask.estimatedTime ? (
                   <div className="mt-2">
                     <div className="flex justify-between items-center mb-1.5">
@@ -382,8 +382,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                       <span className="text-sm font-bold text-white">{calculateProgress(editingTask.actualTime, editingTask.estimatedTime)}%</span>
                     </div>
                     <div className="w-full h-2 bg-neutral-900 rounded-full overflow-hidden p-0.5">
-                      <div 
-                        className="h-full bg-indigo-500 rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(99,102,241,0.5)]" 
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                         style={{ width: `${calculateProgress(editingTask.actualTime, editingTask.estimatedTime)}%` }}
                       />
                     </div>
@@ -403,11 +403,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                       <button
                         key={p}
                         onClick={() => setEditingTask({ ...editingTask, priority: p as any })}
-                        className={`flex-1 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${
-                          editingTask.priority === p 
-                            ? 'bg-neutral-700 border-white/20 text-white ring-1 ring-white/10' 
+                        className={`flex-1 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${editingTask.priority === p
+                            ? 'bg-neutral-700 border-white/20 text-white ring-1 ring-white/10'
                             : 'bg-neutral-900/50 border-white/5 text-neutral-500 hover:border-white/10'
-                        }`}
+                          }`}
                       >
                         {p}
                       </button>
@@ -417,7 +416,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
 
                 <div>
                   <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1.5 block">Статус</label>
-                  <select 
+                  <select
                     className="w-full bg-neutral-900 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
                     value={editingTask.status}
                     onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value as any })}
@@ -430,7 +429,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
               {/* Dependencies Section */}
               <div>
                 <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-1.5 block flex items-center gap-1">
-                   <LinkIcon size={10} /> Зависимости (Завершите эти задачи первыми)
+                  <LinkIcon size={10} /> Зависимости (Завершите эти задачи первыми)
                 </label>
                 <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto bg-neutral-900/30 rounded-xl p-3 border border-white/5">
                   {filteredTasks
@@ -439,15 +438,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                       <button
                         key={depTask.id}
                         onClick={() => togglePrerequisite(depTask.id)}
-                        className={`flex items-center justify-between p-2 rounded-lg border transition-all text-xs ${
-                          editingTask.prerequisiteIds?.includes(depTask.id)
+                        className={`flex items-center justify-between p-2 rounded-lg border transition-all text-xs ${editingTask.prerequisiteIds?.includes(depTask.id)
                             ? 'bg-indigo-500/10 border-indigo-500/50 text-indigo-300'
                             : 'bg-transparent border-white/5 text-neutral-500 hover:border-white/10'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2 truncate">
-                           <div className={`w-2 h-2 rounded-full ${COLUMNS.find(c => c.id === depTask.status)?.color}`} />
-                           <span className="truncate">{depTask.title}</span>
+                          <div className={`w-2 h-2 rounded-full ${COLUMNS.find(c => c.id === depTask.status)?.color}`} />
+                          <span className="truncate">{depTask.title}</span>
                         </div>
                         {editingTask.prerequisiteIds?.includes(depTask.id) && <X size={12} />}
                       </button>
@@ -465,11 +463,10 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
                     <button
                       key={member.id}
                       onClick={() => setEditingTask({ ...editingTask, assigneeId: member.id })}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                        editingTask.assigneeId === member.id 
-                          ? 'border-indigo-500 bg-indigo-500/10' 
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${editingTask.assigneeId === member.id
+                          ? 'border-indigo-500 bg-indigo-500/10'
                           : 'border-white/5 bg-neutral-900/50 hover:border-white/10'
-                      }`}
+                        }`}
                     >
                       <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center text-xs font-bold text-white shadow-lg`}>
                         {member.avatarLabel}
@@ -484,13 +481,13 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, department, onUpdateTa
             </div>
 
             <div className="flex justify-end gap-3 mt-10 shrink-0">
-              <button 
+              <button
                 onClick={() => setEditingTask(null)}
                 className="px-4 py-2 text-sm font-medium text-neutral-400 hover:text-white transition-colors"
               >
                 Отмена
               </button>
-              <button 
+              <button
                 onClick={handleUpdateTaskDetails}
                 className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-xl shadow-indigo-600/20 hover:scale-105 active:scale-95"
               >
