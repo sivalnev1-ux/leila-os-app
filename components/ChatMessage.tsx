@@ -1,8 +1,7 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Message, Department } from '../types';
 import { getBotIcon, DEPARTMENT_BOTS } from '../constants';
-import { ExternalLink, FileText, Image as ImageIcon, Download, User, HardDrive, File as FileGeneric } from 'lucide-react';
+import { ExternalLink, FileText, Image as ImageIcon, Download, User, HardDrive, File as FileGeneric, Volume2, VolumeX } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
@@ -11,12 +10,44 @@ interface ChatMessageProps {
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const [imgError, setImgError] = useState(false);
   const [isAvatarOpen, setIsAvatarOpen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const isUser = message.role === 'user';
   const botInfo = DEPARTMENT_BOTS.find(b => b.id === message.department);
 
-  // Simplified Markdown-like rendering for Drive files if found in content
-  // Since Gemini might describe the files, we check if there's a specific format
-  // or just render the text. In a real scenario, we'd have a custom 'parts' type.
+  // Stop playback if component unmounts
+  useEffect(() => {
+    return () => {
+      if (isPlaying) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [isPlaying]);
+
+  const toggleSpeech = () => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      return;
+    }
+
+    // Cancel any ongoing speech first
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    // Optional: Try to set Russian voice if available, otherwise browser default
+    const voices = window.speechSynthesis.getVoices();
+    const ruVoice = voices.find(v => v.lang.includes('ru'));
+    if (ruVoice) utterance.voice = ruVoice;
+
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => setIsPlaying(true);
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   return (
     <div className={`flex w-full mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -132,6 +163,22 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             </span>
             <div className="w-1 h-1 bg-neutral-700 rounded-full" />
             <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-tighter">Verified Identity</span>
+
+            {!isUser && (
+              <>
+                <div className="w-1 h-1 bg-neutral-700 rounded-full mx-1" />
+                <button
+                  onClick={toggleSpeech}
+                  className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-full transition-colors ${isPlaying ? 'bg-indigo-500/20 text-indigo-400' : 'hover:bg-white/10 text-neutral-400'}`}
+                  title={isPlaying ? "Остановить чтение" : "Прочитать вслух"}
+                >
+                  {isPlaying ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                  <span className="text-[9px] uppercase tracking-widest font-bold">
+                    {isPlaying ? "Stop" : "Speak"}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

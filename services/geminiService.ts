@@ -123,6 +123,16 @@ const processProductImageTool: FunctionDeclaration = {
 };
 
 export class GeminiService {
+  getOrchestratorConfig() {
+    let deptContext = `\nТЕКУЩИЙ КОНТЕКСТ: Отдел ${Department.GENERAL}. Тон деловой, секретарь-адъютант.`;
+    deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя. \nОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
+
+    return {
+      systemInstruction: LEILA_SYSTEM_INSTRUCTION + deptContext,
+      tools: [{ functionDeclarations: [delegateTaskTool, listDriveFilesTool, createTaskTool, listCalendarEventsTool, createCalendarEventTool, processProductImageTool] }]
+    };
+  }
+
   async sendMessage(
     message: string,
     attachments: Attachment[],

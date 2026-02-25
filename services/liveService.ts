@@ -6,10 +6,15 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 export class LiveService {
   private sessionPromise: Promise<any> | null = null;
   private audioContext: AudioContext | null = null;
+  private audioDestination: MediaStreamAudioDestinationNode | null = null;
   private nextStartTime = 0;
   private sources = new Set<AudioBufferSourceNode>();
   private onAudioLevelChange: ((level: number) => void) | null = null;
   private isMuted = false;
+
+  getAudioStream(): MediaStream | null {
+    return this.audioDestination?.stream || null;
+  }
 
   setMuted(muted: boolean) {
     this.isMuted = muted;
@@ -20,6 +25,8 @@ export class LiveService {
 
   async connect(callbacks: {
     systemContext?: string;
+    systemInstruction?: string;
+    tools?: any[];
     onMessage?: (text: string) => void;
     onAudioData?: (level: number) => void;
     onClose?: () => void;
@@ -76,22 +83,20 @@ export class LiveService {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
         },
-        systemInstruction: `ТВОЙ ТЕКУЩИЙ КОНТЕКСТ РЕАЛЬНОГО ВРЕМЕНИ:
-${callbacks.systemContext || "Нет активных задач или расписания."}
+        tools: callbacks.tools,
+        systemInstruction: `ТВОЙ ТЕКУЩИЙ ОПЕРАЦИОННЫЙ КОНТЕКСТ:
+${callbacks.systemContext || "Нет активных задач."}
 
-Ты — Лейла, профессиональный личный ИИ-секретарь и надежный адъютант Сергея.
-Твое имя: Лейла. Создатель и руководитель: Сергей.
-Ваше местоположение: Израиль, Беэр-Шева (IST/UTC+3).
-
-ТВОЯ МИССИЯ:
-Помогать Сергею в управлении его жизнью, проектами (включая R&D проекты и финансы) и временем. Ты — его правая рука.
+ИДЕНТИЧНОСТЬ И БАЗОВЫЕ ЗНАНИЯ СИСТЕМЫ:
+${callbacks.systemInstruction || "Ты — Лейла, профессиональный личный ИИ-секретарь и надежный адъютант Сергея."}
 
 ПРАВИЛА ГОЛОСОВОЙ СВЯЗИ (КРИТИЧЕСКИ ВАЖНО):
 1. ЯЗЫК: Общайся ТОЛЬКО НА РУССКОМ языке. Никакого иврита или английского без прямой просьбы.
 2. ФОРМАТ РЕЧИ: Это живой телефонный разговор. Отвечай ультра-лаконично (1-3 коротких предложения). Никогда не читай длинные списки или лекции.
-3. ХАРАКТЕР: Уверенная, сдержанная, спокойная, невероятно умная и преданная помощница. Чуть теплая, но строгая в работе. Без лишних эмоций и "роботизированных" фраз.
+3. ХАРАКТЕР: Уверенная, сдержанная, спокойная, невероятно умная и преданная помощница. Без лишних эмоций и "роботизированных" фраз.
 4. ЕСТЕСТВЕННОСТЬ: Не произноси вслух спецсимволы, звездочки или нумерацию. Речь должна литься естественно.
-5. ТОЧНОСТЬ: Если у тебя нет данных — скажи "У меня нет этой информации", не придумывай факты.`,
+5. ТОЧНОСТЬ: Если у тебя нет данных — скажи "Я не знаю", не придумывай факты.
+6. ВАЖНОЕ: Во время звонка ты МОЖЕШЬ обещать выполнить команды, записать задачи или вызвать Отделы (через делегирование). Обязательно подтверждай: "Поняла, добавлю в Таблицу" или "Поручу Отделу Финансов". После звонка система автоматически вызовет все нужные тебе функции.`,
       },
     });
 
@@ -116,7 +121,17 @@ ${callbacks.systemContext || "Нет активных задач или расп
       this.nextStartTime = Math.max(this.nextStartTime, this.audioContext.currentTime);
       const source = this.audioContext.createBufferSource();
       source.buffer = buffer;
+
+      if (!this.audioDestination) {
+        this.audioDestination = this.audioContext.createMediaStreamDestination();
+      }
+
+      // Connect to the default hardware destination so standard Web Audio API playback still works
       source.connect(this.audioContext.destination);
+
+      // Also connect to our custom MediaStream destination so we can route it to <audio> for setSinkId
+      source.connect(this.audioDestination);
+
       source.addEventListener('ended', () => {
         this.sources.delete(source);
         if (this.sources.size === 0) {

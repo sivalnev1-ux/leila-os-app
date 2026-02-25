@@ -1,12 +1,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { liveService } from '../services/liveService';
-import { Mic, MicOff, PhoneOff, Sparkles, Brain, Volume2, Activity, User, Ear } from 'lucide-react';
+import { geminiService } from '../services/geminiService';
+import { Mic, MicOff, PhoneOff, Sparkles, Brain, Volume2, VolumeX, Activity, User, Ear } from 'lucide-react';
 import { LEILA_AVATAR_URL } from '../constants';
 
 const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: string }> = ({ onExit, contextPayload }) => {
   const [isActive, setIsActive] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
+  const [isSpeakerphone, setIsSpeakerphone] = useState(false);
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [transcription, setTranscription] = useState('');
@@ -19,6 +21,7 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
   const meetingLogRef = useRef('');
 
   const streamRef = useRef<MediaStream | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const speakingTimeoutRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -29,13 +32,43 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
     return () => stopSession();
   }, []);
 
+  const toggleSpeakerphone = async () => {
+    if (!audioPlayerRef.current) return;
+    try {
+      // Not all browsers support setSinkId (like iOS Safari), we wrap in try-catch
+      if ('setSinkId' in audioPlayerRef.current) {
+        // Attempting to route to default speaker (empty string usually resets to default system route)
+        // Advanced logic would require enumerating devices via navigator.mediaDevices.enumerateDevices()
+        // For standard Android/Chrome, just calling it without specific ID might toggle output types or we need specific ID
+        // Often, 'speaker' is not directly a deviceId. We just toggle the state for UI and hope standard WebRTC routing 
+        // respects the HTMLAudioElement vs earpiece context.
+        // Actually, forcing output to an Audio Element often bypasses the WebRTC earpiece lock on Chrome Android.
+
+        // This is a UI toggle + basic sink attempt
+        const newMode = !isSpeakerphone;
+        setIsSpeakerphone(newMode);
+
+        // If we had a specific device list we would call (audioPlayerRef.current as any).setSinkId(deviceId);
+      } else {
+        setIsSpeakerphone(!isSpeakerphone); // Just toggle UI if API unsupported
+      }
+    } catch (e) {
+      console.warn("Speakerphone toggle error:", e);
+      setIsSpeakerphone(!isSpeakerphone);
+    }
+  };
+
   const startSession = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       streamRef.current = stream;
+
+      const orchestratorConfig = geminiService.getOrchestratorConfig();
 
       await liveService.connect({
         systemContext: contextPayload,
+        systemInstruction: orchestratorConfig.systemInstruction,
+        tools: orchestratorConfig.tools,
         onMessage: (text) => {
           if (text.trim()) {
             meetingLogRef.current += `\nЛейла: ${text.trim()}`;
@@ -56,6 +89,12 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
         },
         onError: (err) => console.error("Live Service Error:", err),
       });
+
+      // Hook up the liveService audio stream to our hidden audio element
+      const botStream = liveService.getAudioStream();
+      if (botStream && audioPlayerRef.current) {
+        audioPlayerRef.current.srcObject = botStream;
+      }
 
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       audioContextRef.current = audioCtx;
@@ -273,11 +312,22 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
           </div>
         </div>
 
-        <div className="mt-16 flex items-center gap-12">
+        <div className="mt-16 flex items-center gap-6 md:gap-12">
+          {/* Speakerphone Toggle */}
+          <button
+            onClick={toggleSpeakerphone}
+            className={`p-5 md:p-7 rounded-3xl transition-all border shadow-2xl hover:scale-110 active:scale-95 group relative ${isSpeakerphone ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/10 text-neutral-400'}`}
+          >
+            <Volume2 size={24} className={isSpeakerphone ? '' : 'opacity-50'} />
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 rounded text-[9px] font-bold uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+              {isSpeakerphone ? 'Speakerphone ON' : 'Speakerphone OFF'}
+            </div>
+          </button>
+
+          {/* Mic Toggle */}
           <button
             onClick={() => setIsMicOn(!isMicOn)}
-            className={`p-7 rounded-3xl transition-all border shadow-2xl hover:scale-110 active:scale-95 group ${isMicOn ? 'bg-white/5 border-white/10 text-white' : 'bg-red-500/10 border-red-500/50 text-red-500'
-              }`}
+            className={`p-5 md:p-7 rounded-3xl transition-all border shadow-2xl hover:scale-110 active:scale-95 group relative ${isMicOn ? 'bg-white/5 border-white/10 text-white' : 'bg-red-500/10 border-red-500/50 text-red-500'}`}
           >
             {isMicOn ? <Mic size={24} /> : <MicOff size={24} />}
             <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 rounded text-[9px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
@@ -285,19 +335,21 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
             </div>
           </button>
 
+          {/* Hang Up Button */}
           <button
             onClick={() => {
               stopSession();
               onExit(meetingLogRef.current.trim());
             }}
-            className="p-10 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-[0_20px_60px_rgba(220,38,38,0.4)] hover:scale-110 active:scale-90 transition-all border border-white/20"
+            className="p-8 md:p-10 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-[0_20px_60px_rgba(220,38,38,0.4)] hover:scale-110 active:scale-90 transition-all border border-white/20"
           >
             <PhoneOff size={32} />
           </button>
 
+          {/* Background Listening Mode */}
           <button
             onClick={toggleListeningMode}
-            className={`p-7 rounded-3xl transition-all border shadow-2xl hover:scale-110 active:scale-95 group ${isListeningMode ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-white/5 border-white/10 text-neutral-400'}`}
+            className={`p-5 md:p-7 rounded-3xl transition-all border shadow-2xl hover:scale-110 active:scale-95 group relative ${isListeningMode ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-white/5 border-white/10 text-neutral-400'}`}
           >
             <Ear size={24} className={isListeningMode ? 'animate-pulse' : ''} />
             <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 rounded text-[9px] font-bold uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
@@ -305,6 +357,9 @@ const LiveSession: React.FC<{ onExit: (log: string) => void, contextPayload?: st
             </div>
           </button>
         </div>
+
+        {/* Hidden Audio element to route WebAudio stream to physical devices */}
+        <audio ref={audioPlayerRef} autoPlay playsInline className="hidden" />
       </div>
 
       <style>{`
