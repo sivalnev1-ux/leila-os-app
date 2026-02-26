@@ -178,6 +178,10 @@ const App: React.FC = () => {
   const toggleRecording = async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop();
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
       setIsRecording(false);
       return;
     }
@@ -211,6 +215,28 @@ const App: React.FC = () => {
 
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
+
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'ru-RU'; // Russian text transcription
+
+        const initialInput = input; // Capture existing text
+
+        recognition.onresult = (event: any) => {
+          let currentTranscript = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            currentTranscript += event.results[i][0].transcript;
+          }
+          setInput(initialInput + (initialInput && currentTranscript ? ' ' : '') + currentTranscript);
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      }
+
       setIsRecording(true);
     } catch (err) {
       console.error("Failed to start recording:", err);
@@ -252,6 +278,10 @@ const App: React.FC = () => {
     let textToSend = overrideInput !== undefined ? overrideInput : input;
     if (isRecording) {
       mediaRecorderRef.current?.stop();
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
       setIsRecording(false);
     }
 
