@@ -122,6 +122,19 @@ const processProductImageTool: FunctionDeclaration = {
   },
 };
 
+const generateCatalogCsvTool: FunctionDeclaration = {
+  name: 'generate_catalog_csv',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Генерирует готовый CSV-файл с товарами для скачивания пользователем. Вызывай этот инструмент, когда пользователь просит подготовить таблицу или файл для импорта в Wix/Shopify.',
+    properties: {
+      csv_content: { type: Type.STRING, description: 'Полный текст CSV-файла, включая строку заголовков (например: handle,name,description,price,sku) и все строки с данными, разделенные запятыми.' },
+      filename: { type: Type.STRING, description: 'Опционально. Имя файла, например: wix_catalog.csv' }
+    },
+    required: ['csv_content'],
+  },
+};
+
 export class GeminiService {
   getOrchestratorConfig() {
     let deptContext = `\nТЕКУЩИЙ КОНТЕКСТ: Отдел ${Department.GENERAL}. Тон деловой, секретарь-адъютант.`;
@@ -162,7 +175,7 @@ export class GeminiService {
 1. Заголовок: Продающий, точный, с ключевыми словами.
 2. Маркетинговое описание: Сочное, вкусное, закрывающее боли клиента. Никакой воды, только польза и эмоции. Почему этот товар особенный?
 3. Характеристики: Сформируй четкий маркированный список фактов (Вес, Вкус, Возраст, Состав).
-4. Подготовка данных: Если пользователь просит таблицу для импорта, выдавай строгий CSV-формат, совместимый с Wix Stores (с колонками handle, name, description, price, sku и т.д.).
+4. ЭКСПОРТ ДАННЫХ В CSV: Если пользователь просит подготовить таблицу для импорта (Wix/Shopify) или сформировать файл с результатами текущей работы, ты ОБЯЗАНА вызвать функцию \`generate_catalog_csv\`. В аргумент 'csv_content' передай строго отформатированный CSV текст. Колонки должны быть: handle,name,description,price,sku. Описание (description) должно быть в одной ячейке (используй кавычки для экранирования абзацев).
 5. ФОТОГРАФИИ (АВТОМАТИЗАЦИЯ LensPerfect AI): Если пользователь загрузил фото товара для каталога, ТЫ ОБЯЗАНА вызвать инструмент \`process_product_image\` (передав индекс картинки) для подготовки чистой идеальной карточки. 
 ВАЖНО: При каждом вызове \`process_product_image\` ВСЕГДА передавай в аргумент 'prompt' следующий текст, чтобы нейросеть выровняла товар, убрала блики и разгладила складки: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare".
 Укажи в ответе пользователю, что "Фото обработано LensPerfect AI: выпрямлено, убраны блики и складки, добавлен студийный свет".`;
@@ -178,7 +191,7 @@ export class GeminiService {
         const agentTools = [];
         if (department === Department.FINANCE) agentTools.push(insertIntoSheetTool, createDriveFileTool, listCalendarEventsTool, createCalendarEventTool);
         else if (department === Department.INVENTOR || department === Department.DEVELOPMENT) agentTools.push(listDriveFilesTool, createDriveFileTool);
-        else if (department === Department.WIX) agentTools.push(processProductImageTool, createDriveFileTool);
+        else if (department === Department.WIX) agentTools.push(processProductImageTool, createDriveFileTool, generateCatalogCsvTool);
 
         if (agentTools.length > 0) {
           tools = [{ functionDeclarations: agentTools }];

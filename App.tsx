@@ -371,6 +371,34 @@ const App: React.FC = () => {
             } else {
               result = { status: 'error', message: 'Изображение с указанным индексом не найдено во вложениях.' };
             }
+          } else if (fc.name === 'generate_catalog_csv') {
+            const csvContent = fc.args.csv_content as string;
+            const filename = (fc.args.filename as string) || 'wix_catalog.csv';
+
+            try {
+              // Convert the string to a Base64 encoded string safely, handling UTF-8 characters specifically for Cyrillic/Hebrew
+              const utf8Bytes = new TextEncoder().encode(csvContent);
+              const binaryString = Array.from(utf8Bytes).map(b => String.fromCharCode(b)).join('');
+              const base64Csv = btoa(binaryString);
+
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + Math.random(),
+                role: 'assistant',
+                content: `📁 ** Сформирован файл для импорта **: `,
+                department: Department.WIX,
+                timestamp: Date.now(),
+                attachments: [{
+                  name: filename,
+                  mimeType: 'text/csv',
+                  url: `data:text/csv;charset=utf-8;base64,${base64Csv}`,
+                  data: base64Csv
+                }]
+              }]);
+
+              result = { status: 'success', message: 'CSV файл успешно сгенерирован и отправлен в чат.' };
+            } catch (err: any) {
+              result = { status: 'error', message: `Ошибка генерации CSV: ${err.message}` };
+            }
           }
 
           toolResponses.push({ functionResponse: { name: fc.name, id: fc.id, response: { result } } });
