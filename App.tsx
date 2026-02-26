@@ -333,6 +333,7 @@ const App: React.FC = () => {
             const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
             result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data);
           } else if (fc.name === 'insert_into_sheet') {
+            console.log("🛠️ Tool Executing: insert_into_sheet", fc.args);
             const receipt_num = fc.args.receipt_number || '';
             const supplier = fc.args.supplier || '';
             if (receipt_num && supplier) {
@@ -347,7 +348,14 @@ const App: React.FC = () => {
               fc.args.margin || '', fc.args.date || timestamp.split(',')[0],
               fc.args.category || '', fc.args.notes || ''
             ];
-            result = await sheetsService.appendRow(FINANCE_SPREADSHEET_ID, rowValues, 'parsed_data!A1');
+            console.log("📊 Prepared Row Values:", rowValues);
+            try {
+              result = await sheetsService.appendRow(FINANCE_SPREADSHEET_ID, rowValues, 'parsed_data!A1');
+              console.log("✅ appendRow SUCCESS:", result);
+            } catch (sheetError) {
+              console.error("❌ appendRow FAILED:", sheetError);
+              result = { status: 'error', message: String(sheetError) };
+            }
           } else if (fc.name === 'create_task') {
             const newTask = {
               id: Math.random().toString(),
@@ -377,16 +385,7 @@ const App: React.FC = () => {
             // Execute sub-request (with empty history so it focuses purely on the delegated task)
             const subResult = await executeBotRequest(desc, attachs, [], targetAgent, true);
 
-            // If the sub-agent inserted items, propagate that information up
-            if (subResult.insertedItems) {
-              toolResponses.push({
-                functionResponse: {
-                  name: 'insert_into_sheet',
-                  id: 'delegated_insert',
-                  response: { result: { status: 'success' } }
-                }
-              });
-            }
+            // If the sub-agent legitimately inserted items, pass the count up through the delegate_task result. We do NOT simulate a fake insert_into_sheet tool call here anymore to avoid false positives.
             result = { status: 'success', sub_agent_report: subResult.text, itemsProcessed: subResult.insertedItems || 0 };
           } else if (fc.name === 'process_product_image') {
             const index = fc.args.image_index as number;
@@ -472,8 +471,13 @@ const App: React.FC = () => {
           } else if (lastTool.functionResponse.name === 'delegate_task') {
             const subReport = lastTool.functionResponse.response.result?.sub_agent_report || '';
             const itemsProcessed = lastTool.functionResponse.response.result?.itemsProcessed || 0;
-            if (itemsProcessed > 0) insertedItemsCount = itemsProcessed;
-            responseText = `✅ תת-הסוכן סיים את עבודתו: \n${subReport} `;
+
+            if (itemsProcessed > 0) {
+              insertedItemsCount = itemsProcessed;
+              responseText = `✅ עובד בהצלחה ונוסף לטבלה: ** ${itemsProcessed} ** פריטים.`;
+            } else {
+              responseText = `✅ תת-הסוכן סיים את עבודתו: \n${subReport} `;
+            }
           } else {
             responseText = "✅ הפקודה המוגבלת בוצעה.";
           }
