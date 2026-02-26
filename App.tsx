@@ -354,22 +354,22 @@ const App: React.FC = () => {
               try {
                 const processedBase64 = await processImageWithPhotoroom(attachs[index].data, customPrompt);
                 // Return a success message back to Gemini WITHOUT the heavy base64 string to avoid hitting the 1M token limit
-                result = { status: 'success', message: 'Обработка завершена: белый студийный фон, тени, AI-ретушь. Картинка добавлена в чат.' };
+                result = { status: 'success', message: 'העיבוד הושלם: רקע סטודיו לבן, צלליות, ריטוש AI. התמונה נוספה לצ\'אט.' };
 
                 // Add the processed image directly to the chat as a system message
                 setMessages(prev => [...prev, {
                   id: Date.now().toString() + Math.random(),
                   role: 'assistant',
-                  content: `🔮 ** LensPerfect AI ** обработал фотографию: `,
+                  content: `🔮 ** LensPerfect AI ** עיבד את התמונה: `,
                   department: Department.WIX,
                   timestamp: Date.now(),
                   attachments: [{ name: 'lensperfect_result.jpg', mimeType: 'image/jpeg', url: `data:image/jpeg;base64,${processedBase64}`, data: processedBase64 }]
                 }]);
               } catch (err: any) {
-                result = { status: 'error', message: `Ошибка API: ${err.message} ` };
+                result = { status: 'error', message: `שגיאת API: ${err.message} ` };
               }
             } else {
-              result = { status: 'error', message: 'Изображение с указанным индексом не найдено во вложениях.' };
+              result = { status: 'error', message: 'התמונה עם האינדקס שצוין לא נמצאה בקבצים המצורפים.' };
             }
           } else if (fc.name === 'generate_catalog_csv') {
             const csvContent = fc.args.csv_content as string;
@@ -384,7 +384,7 @@ const App: React.FC = () => {
               setMessages(prev => [...prev, {
                 id: Date.now().toString() + Math.random(),
                 role: 'assistant',
-                content: `📁 ** Сформирован файл для импорта **: `,
+                content: `📁 ** הופק קובץ לייבוא **: `,
                 department: Department.WIX,
                 timestamp: Date.now(),
                 attachments: [{
@@ -395,9 +395,9 @@ const App: React.FC = () => {
                 }]
               }]);
 
-              result = { status: 'success', message: 'CSV файл успешно сгенерирован и отправлен в чат.' };
+              result = { status: 'success', message: 'קובץ CSV הופק בהצלחה ונשלח לצ\'אט.' };
             } catch (err: any) {
-              result = { status: 'error', message: `Ошибка генерации CSV: ${err.message}` };
+              result = { status: 'error', message: `שגיאה בהפקת CSV: ${err.message}` };
             }
           }
 
@@ -420,21 +420,21 @@ const App: React.FC = () => {
         if (insertSheetCalls.length > 0) {
           const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
           const failCount = insertSheetCalls.length - successCount;
-          responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в Таблицу: ** ${successCount}** шт.` : `⚠️ Успешно: ${successCount}.Ошибок: ${failCount}.`;
+          responseText = successCount > 0 && failCount === 0 ? `✅ עובד בהצלחה ונוסף לטבלה: ** ${successCount}** פריטים.` : `⚠️ הצלחות: ${successCount}. שגיאות: ${failCount}.`;
         } else {
           const lastTool = toolResponses[toolResponses.length - 1];
           if (lastTool.functionResponse.name === 'list_drive_files') {
             const files = lastTool.functionResponse.response.result?.files;
-            responseText = files?.length > 0 ? `📂 Найдено файлов: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 Файлы не найдены.";
+            responseText = files?.length > 0 ? `📂 קבצים שנמצאו: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 לא נמצאו קבצים.";
           } else if (lastTool.functionResponse.name === 'delegate_task') {
-            responseText = `✅ Субагент завершил работу: \n${lastTool.functionResponse.response.result?.sub_agent_report} `;
+            responseText = `✅ תת-הסוכן סיים את עבודתו: \n${lastTool.functionResponse.response.result?.sub_agent_report} `;
           } else {
-            responseText = "✅ Ограниченная команда выполнена.";
+            responseText = "✅ הפקודה המוגבלת בוצעה.";
           }
         }
       }
 
-      return responseText || 'Команда выполнена успешно.';
+      return responseText || 'הפקודה בוצעה בהצלחה.';
     };
 
     try {
@@ -455,7 +455,7 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       console.error(err);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Ошибка: ${err?.message || 'Неизвестный сбой (см. консоль)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `שגיאה: ${err?.message || 'תקלה לא ידועה (ראה מסוף)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
     } finally {
       setIsTyping(false);
       setIsAccessingDrive(false);
@@ -624,8 +624,8 @@ const App: React.FC = () => {
   };
 
   const liveContextPayload = `
-ТЕКУЩИЙ СПИСОК ЗАДАЧ СЕРГЕЯ В СИСТЕМЕ:
-${tasks.length === 0 ? 'Задач пока нет.' : tasks.map(t => `- [${t.status}] ${t.title}`).join('\n')}
+רשימת המשימות הנוכחית של סרגיי במערכת:
+${tasks.length === 0 ? 'אין משימות כרגע.' : tasks.map(t => `- [${t.status}] ${t.title}`).join('\n')}
 `.trim();
 
   return (
