@@ -317,7 +317,7 @@ const App: React.FC = () => {
       hist: any[],
       dept: Department,
       isSubTask = false
-    ): Promise<string> => {
+    ): Promise<{ text: string; insertedItems?: number }> => {
       let response = await geminiService.sendMessage(promptText, attachs, hist, dept, processedReceipts);
       let toolResponses: any[] = [];
 
@@ -375,8 +375,19 @@ const App: React.FC = () => {
             }]);
 
             // Execute sub-request (with empty history so it focuses purely on the delegated task)
-            const subResultText = await executeBotRequest(desc, attachs, [], targetAgent, true);
-            result = { status: 'success', sub_agent_report: subResultText };
+            const subResult = await executeBotRequest(desc, attachs, [], targetAgent, true);
+
+            // If the sub-agent inserted items, propagate that information up
+            if (subResult.insertedItems) {
+              toolResponses.push({
+                functionResponse: {
+                  name: 'insert_into_sheet',
+                  id: 'delegated_insert',
+                  response: { result: { status: 'success' } }
+                }
+              });
+            }
+            result = { status: 'success', sub_agent_report: subResult.text, itemsProcessed: subResult.insertedItems || 0 };
           } else if (fc.name === 'process_product_image') {
             const index = fc.args.image_index as number;
             const customPrompt = fc.args.prompt as string | undefined;
@@ -445,26 +456,31 @@ const App: React.FC = () => {
       let responseText = '';
       try { responseText = response.text; } catch (e) { }
 
+      let insertedItemsCount = 0;
       if (!responseText && toolResponses.length > 0) {
         const insertSheetCalls = toolResponses.filter(t => t.functionResponse.name === 'insert_into_sheet');
         if (insertSheetCalls.length > 0) {
           const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
+          insertedItemsCount = successCount;
           const failCount = insertSheetCalls.length - successCount;
-          responseText = successCount > 0 && failCount === 0 ? `✅ עובד בהצלחה ונוסף לטבלה: ** ${successCount}** פריטים.` : `⚠️ הצלחות: ${successCount}. שגיאות: ${failCount}.`;
+          responseText = successCount > 0 && failCount === 0 ? `✅ עובד בהצלחה ונוסף לטבלה: ** ${successCount} ** פריטים.` : `⚠️ הצלחות: ${successCount}. שגיאות: ${failCount}.`;
         } else {
           const lastTool = toolResponses[toolResponses.length - 1];
           if (lastTool.functionResponse.name === 'list_drive_files') {
             const files = lastTool.functionResponse.response.result?.files;
             responseText = files?.length > 0 ? `📂 קבצים שנמצאו: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 לא נמצאו קבצים.";
           } else if (lastTool.functionResponse.name === 'delegate_task') {
-            responseText = `✅ תת-הסוכן סיים את עבודתו: \n${lastTool.functionResponse.response.result?.sub_agent_report} `;
+            const subReport = lastTool.functionResponse.response.result?.sub_agent_report || '';
+            const itemsProcessed = lastTool.functionResponse.response.result?.itemsProcessed || 0;
+            if (itemsProcessed > 0) insertedItemsCount = itemsProcessed;
+            responseText = `✅ תת-הסוכן סיים את עבודתו: \n${subReport} `;
           } else {
             responseText = "✅ הפקודה המוגבלת בוצעה.";
           }
         }
       }
 
-      return responseText || 'הפקודה בוצעה בהצלחה.';
+      return { text: responseText || 'הפקודה בוצעה בהצלחה.', insertedItems: insertedItemsCount };
     };
 
     try {
@@ -473,12 +489,12 @@ const App: React.FC = () => {
         parts: [{ text: m.content }]
       })).slice(-20);
 
-      const finalResponseText = await executeBotRequest(promptForModel, currentAttachments, history, Department.GENERAL);
+      const finalResponse = await executeBotRequest(promptForModel, currentAttachments, history, Department.GENERAL);
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: finalResponseText,
+        content: finalResponse.text,
         department: Department.GENERAL,
         timestamp: Date.now(),
       };
