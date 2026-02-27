@@ -394,22 +394,22 @@ const App: React.FC = () => {
               try {
                 const processedBase64 = await processImageWithPhotoroom(attachs[index].data, customPrompt);
                 // Return a success message back to Gemini WITHOUT the heavy base64 string to avoid hitting the 1M token limit
-                result = { status: 'success', message: 'העיבוד הושלם: רקע סטודיו לבן, צלליות, ריטוש AI. התמונה נוספה לצ\'אט.' };
+                result = { status: 'success', message: 'Обработка завершена: белый студийный фон, тени, ИИ-ретушь. Фотография добавлена в чат.' };
 
                 // Add the processed image directly to the chat as a system message
                 setMessages(prev => [...prev, {
                   id: Date.now().toString() + Math.random(),
                   role: 'assistant',
-                  content: `🔮 ** LensPerfect AI ** עיבד את התמונה: `,
+                  content: `🔮 ** LensPerfect AI ** обработал изображение: `,
                   department: Department.WIX,
                   timestamp: Date.now(),
                   attachments: [{ name: 'lensperfect_result.jpg', mimeType: 'image/jpeg', url: `data:image/jpeg;base64,${processedBase64}`, data: processedBase64 }]
                 }]);
               } catch (err: any) {
-                result = { status: 'error', message: `שגיאת API: ${err.message} ` };
+                result = { status: 'error', message: `Ошибка API: ${err.message} ` };
               }
             } else {
-              result = { status: 'error', message: 'התמונה עם האינדקס שצוין לא נמצאה בקבצים המצורפים.' };
+              result = { status: 'error', message: 'Изображение с указанным индексом не найдено во вложениях.' };
             }
           } else if (fc.name === 'generate_catalog_csv') {
             const csvContent = fc.args.csv_content as string;
@@ -424,7 +424,7 @@ const App: React.FC = () => {
               setMessages(prev => [...prev, {
                 id: Date.now().toString() + Math.random(),
                 role: 'assistant',
-                content: `📁 ** הופק קובץ לייבוא **: `,
+                content: `📁 ** Сгенерирован файл для импорта **: `,
                 department: Department.WIX,
                 timestamp: Date.now(),
                 attachments: [{
@@ -435,9 +435,9 @@ const App: React.FC = () => {
                 }]
               }]);
 
-              result = { status: 'success', message: 'קובץ CSV הופק בהצלחה ונשלח לצ\'אט.' };
+              result = { status: 'success', message: 'CSV файл успешно сгенерирован и отправлен в чат.' };
             } catch (err: any) {
-              result = { status: 'error', message: `שגיאה בהפקת CSV: ${err.message}` };
+              result = { status: 'error', message: `Ошибка генерации CSV: ${err.message}` };
             }
           }
 
@@ -456,35 +456,46 @@ const App: React.FC = () => {
       try { responseText = response.text; } catch (e) { }
 
       let insertedItemsCount = 0;
-      if (!responseText && toolResponses.length > 0) {
+      if (toolResponses.length > 0) {
         const insertSheetCalls = toolResponses.filter(t => t.functionResponse.name === 'insert_into_sheet');
         if (insertSheetCalls.length > 0) {
           const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
           insertedItemsCount = successCount;
           const failCount = insertSheetCalls.length - successCount;
-          responseText = successCount > 0 && failCount === 0 ? `✅ עובד בהצלחה ונוסף לטבלה: ** ${successCount} ** פריטים.` : `⚠️ הצלחות: ${successCount}. שגיאות: ${failCount}.`;
+
+          if (!responseText) {
+            responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в таблицу: ** ${successCount} ** позиций.` : `⚠️ Успешно: ${successCount}. Ошибок: ${failCount}.`;
+          } else if (successCount > 0) {
+            responseText += `\n\n✅ [Система] В таблицу добавлено ** ${successCount} ** позиций.`;
+          }
         } else {
           const lastTool = toolResponses[toolResponses.length - 1];
           if (lastTool.functionResponse.name === 'list_drive_files') {
             const files = lastTool.functionResponse.response.result?.files;
-            responseText = files?.length > 0 ? `📂 קבצים שנמצאו: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 לא נמצאו קבצים.";
+            if (!responseText) {
+              responseText = files?.length > 0 ? `📂 Найденные файлы: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 Файлы не найдены.";
+            }
           } else if (lastTool.functionResponse.name === 'delegate_task') {
             const subReport = lastTool.functionResponse.response.result?.sub_agent_report || '';
             const itemsProcessed = lastTool.functionResponse.response.result?.itemsProcessed || 0;
 
             if (itemsProcessed > 0) {
               insertedItemsCount = itemsProcessed;
-              responseText = `✅ עובד בהצלחה ונוסף לטבלה: ** ${itemsProcessed} ** פריטים.`;
-            } else {
-              responseText = `✅ תת-הסוכן סיים את עבודתו: \n${subReport} `;
+              if (!responseText) {
+                responseText = `✅ Успешно обработано и добавлено в таблицу: ** ${itemsProcessed} ** позиций.`;
+              } else {
+                responseText += `\n\n✅ [Система] Суб-агент добавил в таблицу ** ${itemsProcessed} ** позиций.`;
+              }
+            } else if (!responseText) {
+              responseText = `✅ Суб-агент завершил работу: \n${subReport} `;
             }
-          } else {
-            responseText = "✅ הפקודה המוגבלת בוצעה.";
+          } else if (!responseText) {
+            responseText = "✅ Ограниченная команда выполнена.";
           }
         }
       }
 
-      return { text: responseText || 'הפקודה בוצעה בהצלחה.', insertedItems: insertedItemsCount };
+      return { text: responseText || 'Команда успешно выполнена.', insertedItems: insertedItemsCount };
     };
 
     try {
@@ -505,7 +516,7 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       console.error(err);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `שגיאה: ${err?.message || 'תקלה לא ידועה (ראה מסוף)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Ошибка: ${err?.message || 'Неизвестная ошибка (см. консоль)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
     } finally {
       setIsTyping(false);
       setIsAccessingDrive(false);
