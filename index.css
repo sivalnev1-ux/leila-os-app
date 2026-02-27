@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Base Styles for Leila OS */
+@layer base {
+  body {
+    background-color: #0a0a0a;
+    color: #e5e5e5;
+  }
+}
