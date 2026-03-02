@@ -119,7 +119,7 @@ export class DriveService {
     }
   }
 
-  async createFile(name: string, mimeType: string, base64Data?: string): Promise<any> {
+  async createFile(name: string, mimeType: string, base64Data?: string, folderId?: string): Promise<any> {
     if (!this.accessToken) {
       return { status: 'error', message: "Нет доступа к Drive. Не могу создать файл." };
     }
@@ -131,7 +131,7 @@ export class DriveService {
         const metadata = {
           name: name,
           mimeType: mimeType,
-          parents: [USER_SPECIFIED_FOLDER]
+          parents: [folderId || USER_SPECIFIED_FOLDER]
         };
 
         response = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -151,7 +151,7 @@ export class DriveService {
         const metadata = {
           name: name,
           mimeType: mimeType,
-          parents: [USER_SPECIFIED_FOLDER]
+          parents: [folderId || USER_SPECIFIED_FOLDER]
         };
 
         // Clean up base64 payload if it has data URL prefix

@@ -7,7 +7,8 @@ export enum Department {
   DEVELOPMENT = 'Development',
   MARKETING = 'Marketing',
   WIX = 'Wix',
-  INVENTOR = 'Inventor'
+  INVENTOR = 'Inventor',
+  PASSEPARTOUT = 'Passepartout'
 }
 
 export interface BotMetadata {

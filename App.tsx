@@ -332,29 +332,38 @@ const App: React.FC = () => {
           } else if (fc.name === 'create_drive_file') {
             const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
             result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data);
-          } else if (fc.name === 'insert_into_sheet') {
-            console.log("🛠️ Tool Executing: insert_into_sheet", fc.args);
-            const receipt_num = fc.args.receipt_number || '';
-            const supplier = fc.args.supplier || '';
-            if (receipt_num && supplier) {
-              const uniqueKey = `${receipt_num}_${supplier} `;
-              setProcessedReceipts(prev => [...new Set([...prev, uniqueKey])]);
-            }
-            const timestamp = new Date().toLocaleString('ru-RU');
-            const rowValues = [
-              timestamp, receipt_num, fc.args.file_name || 'Распознано',
-              supplier, fc.args.product_name || '', fc.args.quantity || 1,
-              fc.args.price || fc.args.cost || 0, fc.args.cost || 0,
-              fc.args.margin || '', fc.args.date || timestamp.split(',')[0],
-              fc.args.category || '', fc.args.notes || ''
-            ];
-            console.log("📊 Prepared Row Values:", rowValues);
-            try {
-              result = await sheetsService.appendRow(FINANCE_SPREADSHEET_ID, rowValues, 'parsed_data!A1');
-              console.log("✅ appendRow SUCCESS:", result);
-            } catch (sheetError) {
-              console.error("❌ appendRow FAILED:", sheetError);
-              result = { status: 'error', message: String(sheetError) };
+          } else if (fc.name === 'save_to_inbox') {
+            const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
+            result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data, '1l9lQGhbAzrtdtuPJ2vZW_2KgnnGEURml');
+          } else if (fc.name === 'process_receipt_batch') {
+            console.log("🛠️ Tool Executing: process_receipt_batch", fc.args);
+            const items = fc.args.items as any[];
+            if (items && items.length > 0) {
+              // Take the receipt and supplier from the first array item to avoid duplicates in the future
+              const firstItem = items[0];
+              const receipt_num = firstItem.receipt_number || '';
+              const supplier = firstItem.supplier || '';
+              if (receipt_num && supplier) {
+                const uniqueKey = `${receipt_num}_${supplier}`;
+                setProcessedReceipts(prev => [...new Set([...prev, uniqueKey])]);
+              }
+
+              console.log(`📊 Sending ${items.length} items to GAS Webhook`);
+              try {
+                const gasUrl = 'https://script.google.com/macros/s/AKfycbxgQVhSYB9dm9CB7FYYKKQ0w_yPkUtBDj2ErpFVS6EQFgTDYXfWs9wnDYJHSEweZXVO/exec';
+                const res = await fetch(gasUrl, {
+                  method: 'POST',
+                  body: JSON.stringify(items)
+                });
+                const resultData = await res.json();
+                console.log("✅ GAS Webhook SUCCESS:", resultData);
+                result = { status: 'success', message: resultData.message, itemsProcessed: resultData.insertedCount || items.length };
+              } catch (webhookError) {
+                console.error("❌ GAS Webhook FAILED:", webhookError);
+                result = { status: 'error', message: String(webhookError) };
+              }
+            } else {
+              result = { status: 'error', message: "Массив items пуст." };
             }
           } else if (fc.name === 'create_task') {
             const newTask = {
@@ -457,14 +466,15 @@ const App: React.FC = () => {
 
       let insertedItemsCount = 0;
       if (toolResponses.length > 0) {
-        const insertSheetCalls = toolResponses.filter(t => t.functionResponse.name === 'insert_into_sheet');
-        if (insertSheetCalls.length > 0) {
-          const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
+        const batchCalls = toolResponses.filter(t => t.functionResponse.name === 'process_receipt_batch');
+        if (batchCalls.length > 0) {
+          const successCalls = batchCalls.filter(t => t.functionResponse.response.result?.status === 'success');
+          const successCount = successCalls.reduce((acc, t) => acc + (t.functionResponse.response.result?.itemsProcessed || 0), 0);
           insertedItemsCount = successCount;
-          const failCount = insertSheetCalls.length - successCount;
+          const failCount = batchCalls.length - successCalls.length;
 
           if (!responseText) {
-            responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в таблицу: ** ${successCount} ** позиций.` : `⚠️ Успешно: ${successCount}. Ошибок: ${failCount}.`;
+            responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в таблицу: ** ${successCount} ** позиций.` : `⚠️ Добавлено позиций: ${successCount}. Ошибок партий: ${failCount}.`;
           } else if (successCount > 0) {
             responseText += `\n\n✅ [Система] В таблицу добавлено ** ${successCount} ** позиций.`;
           }

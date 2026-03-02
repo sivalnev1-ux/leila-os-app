@@ -58,6 +58,7 @@ export const TEAM_MEMBERS: Assignee[] = [
   { id: 'leila', name: 'Лейла (AI)', avatarLabel: 'L', color: 'bg-purple-600', avatarUrl: LEILA_AVATAR_URL },
   { id: 'alex', name: 'Алекс (Dev)', avatarLabel: 'A', color: 'bg-orange-600' },
   { id: 'maya', name: 'Майя (Creative)', avatarLabel: 'M', color: 'bg-pink-600' },
+  { id: 'passepartout', name: 'Паспарту (Архив)', avatarLabel: 'P', color: 'bg-teal-600' }
 ];
 
 export const DEPARTMENT_BOTS: BotMetadata[] = [
@@ -96,6 +97,13 @@ export const DEPARTMENT_BOTS: BotMetadata[] = [
     description: 'Техническая архитектура и код',
     icon: 'Code',
     color: 'bg-orange-500'
+  },
+  {
+    id: Department.PASSEPARTOUT,
+    name: 'Паспарту',
+    description: 'Архивариус',
+    icon: 'Briefcase',
+    color: 'bg-teal-600'
   }
 ];
 

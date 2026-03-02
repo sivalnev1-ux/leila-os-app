@@ -87,25 +87,35 @@ const createCalendarEventTool: FunctionDeclaration = {
   },
 };
 
-const insertIntoSheetTool: FunctionDeclaration = {
-  name: 'insert_into_sheet',
+const processReceiptBatchTool: FunctionDeclaration = {
+  name: 'process_receipt_batch',
   parameters: {
     type: Type.OBJECT,
-    description: 'CALL THIS ДЛЯ ДОБАВЛЕНИЯ РАСПОЗНАННЫХ ДАННЫХ ИЗ ЧЕКА В ТАБЛИЦУ. Извлекай и заполняй все возможные поля.',
+    description: 'ВЫЗЫВАТЬ ДЛЯ МАССОВОГО ДОБАВЛЕНИЯ ВСЕХ РАСПОЗНАННЫХ ДАННЫХ ИЗ ЧЕКА В ТАБЛИЦУ. Извлекай и заполняй все возможные поля.',
     properties: {
-      receipt_number: { type: Type.STRING, description: 'Уникальный номер чека, квитанции или Invoice (напр. מספר חשבונית)' },
-      file_name: { type: Type.STRING, description: 'Название файла или документа' },
-      supplier: { type: Type.STRING, description: 'Поставщик / Магазин / Контрагент' },
-      product_name: { type: Type.STRING, description: 'Название товара или услуги' },
-      quantity: { type: Type.NUMBER, description: 'Количество' },
-      price: { type: Type.NUMBER, description: 'Цена за единицу (число)' },
-      cost: { type: Type.NUMBER, description: 'Общая стоимость / Итоговая сумма (число)' },
-      margin: { type: Type.NUMBER, description: 'Маржа (если применимо)' },
-      date: { type: Type.STRING, description: 'Дата документа (ДД.ММ.ГГГГ)' },
-      category: { type: Type.STRING, description: 'Категория расхода' },
-      notes: { type: Type.STRING, description: 'Дополнительные заметки' }
+      items: {
+        type: Type.ARRAY,
+        description: 'Массив всех извлеченных позиций товаров из чека или накладной.',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            receipt_number: { type: Type.STRING, description: 'Уникальный номер чека, квитанции или Invoice (напр. מספר חשבונית)' },
+            file_name: { type: Type.STRING, description: 'Название файла или документа' },
+            supplier: { type: Type.STRING, description: 'Поставщик / Магазин / Контрагент' },
+            product_name: { type: Type.STRING, description: 'Название товара или услуги' },
+            quantity: { type: Type.NUMBER, description: 'Количество' },
+            price: { type: Type.NUMBER, description: 'Цена за единицу (число)' },
+            cost: { type: Type.NUMBER, description: 'Общая стоимость / Итоговая сумма (число)' },
+            margin: { type: Type.NUMBER, description: 'Маржа (если применимо)' },
+            date: { type: Type.STRING, description: 'Дата документа (ДД.ММ.ГГГГ)' },
+            category: { type: Type.STRING, description: 'Категория расхода' },
+            notes: { type: Type.STRING, description: 'Дополнительные заметки' }
+          },
+          required: ['receipt_number', 'supplier', 'product_name', 'price']
+        }
+      }
     },
-    required: ['receipt_number', 'supplier', 'product_name', 'price'],
+    required: ['items'],
   },
 };
 
@@ -135,10 +145,25 @@ const generateCatalogCsvTool: FunctionDeclaration = {
   },
 };
 
+const saveToInboxTool: FunctionDeclaration = {
+  name: 'save_to_inbox',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Сохраняет файл (документ, накладную, изображение) непосредственно в папку Входящие (INBOX) на Google Диске для дальнейшего разбора или хранения.',
+    properties: {
+      name: { type: Type.STRING, description: 'Сгенерированное осмысленное имя для сохраняемого файла, полезное для поиска (например "Накладная_Поставщик_Дата.pdf")' },
+      mimeType: { type: Type.STRING, description: 'MIME тип файла (например, image/jpeg или application/pdf)' }
+    },
+    required: ['name', 'mimeType'],
+  },
+};
+
 export class GeminiService {
   getOrchestratorConfig() {
     let deptContext = `\nТЕКУЩИЙ КОНТЕКСТ: Отдел ${Department.GENERAL}. Тон деловой, секретарь-адъютант.`;
-    deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя. \nОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
+    deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix, passepartout). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя. 
+    ОЧЕНЬ ВАЖНО: Если пользователь просит ПРОСТО СОХРАНИТЬ в папку ИЛИ ПОЛОЖИТЬ в папку документы/файлы без необходимости их анализировать — немедленно делегируй эту задачу отделу passepartout (Паспарту). Обязательно передай в инструкциях, как назвать эти файлы.
+    ОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
 
     return {
       systemInstruction: LEILA_SYSTEM_INSTRUCTION + deptContext,
@@ -161,11 +186,11 @@ export class GeminiService {
 
       if (department === Department.FINANCE) {
         deptContext += `\nФУНКЦИЯ OCR (РАСПОЗНАВАНИЕ ТЕКСТА): Если пользователь прикрепляет изображение чека/квитанции, твоя задача — автоматически распознать текст и извлечь ВСЕ данные. ВАЖНО: НИКОГДА НЕ ОБЪЕДИНЯЙ ТОВАРЫ В ОБЩУЮ СУММУ ЧЕКА! Ты ОБЯЗАНА вытащить КАЖДУЮ ОТДЕЛЬНУЮ ПОЗИЦИЮ из чека (каждый уникальный товар, вкус, вид, количество, цену).
-ГЛАВНОЕ ПРАВИЛО: Для каждой позиции ты ДОЛЖНА ВЫЗВАТЬ ФУНКЦИЮ \`insert_into_sheet\`! Это не обсуждается. Если в накладной 29 разных кормов, ты СТРОГО ОБЯЗАНА сгенерировать 29 вызовов функции \`insert_into_sheet\` в своем ответе. КРИТИЧЕСКИ ВАЖНО: ЗАПРЕЩАЕТСЯ СПРАШИВАТЬ РАЗРЕШЕНИЯ. НИКОГДА не отвечай просто текстом "я сделала". ТЫ ОБЯЗАНА СГЕНЕРИРОВАТЬ FUNCTION CALLS В АПИ! В текстовом ответе просто скажи 1 предложением: "Документ обработан, все позиции отправлены в базу." И ОБЯЗАТЕЛЬНО ПРИКРЕПИ ВЫЗОВЫ ФУНКЦИЙ!`;
+ГЛАВНОЕ ПРАВИЛО: Ты ДОЛЖНА ВЫЗВАТЬ ФУНКЦИЮ \`process_receipt_batch\` и передать в нее МАССИВ всех извлеченных из накладной товаров! Это не обсуждается. Если в накладной 29 разных кормов, ты СТРОГО ОБЯЗАНА передать все 29 товаров в поле \`items\` внутри вызова \`process_receipt_batch\`. КРИТИЧЕСКИ ВАЖНО: ЗАПРЕЩАЕТСЯ СПРАШИВАТЬ РАЗРЕШЕНИЯ. НИКОГДА не отвечай просто текстом "я сделала". ТЫ ОБЯЗАНА СГЕНЕРИРОВАТЬ FUNCTION CALL В АПИ! В текстовом ответе просто скажи 1 предложением: "Документ обработан, все позиции отправлены в базу."`;
         deptContext += `\nФИНАНСОВЫЙ КАЛЕНДАРЬ (CASH FLOW): Если в документе (например, в чеке или счете) указана дата БУДУЩЕГО платежа (отложенный чек, рассрочка, дата оплаты накладной), ты ОБЯЗАНА записать это не только в Таблицу, но И создать событие в Календаре (create_calendar_event) на эту дату, чтобы Сергий видел ожидаемый расход/доход. В названии события пиши сумму и получателя, например "Сход чека: 1540₪ [Reflex]".`;
 
         if (processedReceipts.length > 0) {
-          deptContext += `\nСПИСОК УЖЕ ОБРАБОТАННЫХ ЧЕКОВ (Формат: НомерДокумента_Поставщик): [${processedReceipts.join(', ')}]. ВАЖНО: На каждом чеке найди "Номер документа" (חשבונית מס) и "Поставщика" (supplier). Составь из них ключ вида "Номер_Поставщик". Если этот ключ ЕСТЬ в Списке, это значит файл - дубликат! ДЛЯ ДУБЛИКАТОВ СТРОГО ЗАПРЕЩАЕТСЯ вызывать функцию insert_into_sheet. Вместо этого для дубликата ты ОБЯЗАНА вызвать функцию "create_drive_file" (name="ДУБЛИКАТ_<НомерДокумента>_<Поставщик>", mimeType="image/jpeg"), чтобы отложить этот чек в Google Drive для ручной проверки. В ответе пользователю напиши на русском, что чек дубликат и отложен (например: "Квитанция является дубликатом и перемещена в отдельную папку для проверки").`;
+          deptContext += `\nСПИСОК УЖЕ ОБРАБОТАННЫХ ЧЕКОВ (Формат: НомерДокумента_Поставщик): [${processedReceipts.join(', ')}]. ВАЖНО: На каждом чеке найди "Номер документа" (חשבונית מס) и "Поставщика" (supplier). Составь из них ключ вида "Номер_Поставщик". Если этот ключ ЕСТЬ в Списке, это значит файл - дубликат! ДЛЯ ДУБЛИКАТОВ СТРОГО ЗАПРЕЩАЕТСЯ вызывать функцию process_receipt_batch. Вместо этого для дубликата ты ОБЯЗАНА вызвать функцию "create_drive_file" (name="ДУБЛИКАТ_<НомерДокумента>_<Поставщик>", mimeType="image/jpeg"), чтобы отложить этот чек в Google Drive для ручной проверки. В ответе пользователю напиши на русском, что чек дубликат и отложен (например: "Квитанция является дубликатом и перемещена в отдельную папку для проверки").`;
         } else {
           deptContext += `\nОБРАБОТКА ДУБЛИКАТОВ: Всегда находи "Номер документа" (חשבונית מס) и "Поставщика" (supplier). Если ты точно уверена по тексту сообщения, что этот файл - дубликат, используй create_drive_file для загрузки его на Диск с именем "ДУБЛИКАТ_<НомерДокумента>_<Поставщик>".`;
         }
@@ -179,20 +204,25 @@ export class GeminiService {
 4. ЭКСПОРТ ДАННЫХ В CSV: Если пользователь просит подготовить таблицу для импорта (Wix/Shopify) или сформировать файл с результатами текущей работы, ты ОБЯЗАНА вызвать функцию \`generate_catalog_csv\`. В аргумент 'csv_content' передай строго отформатированный CSV текст. Колонки должны быть: handle,name,description,price,sku. Описание (description) должно быть в одной ячейке (используй кавычки для экранирования абзацев). КРИТИЧЕСКИ ВАЖНО: КАТЕГОРИЧЕСКИ ЗАПРЕЩАЕТСЯ ВОЗВРАЩАТЬ В ТЕКСТЕ ОТВЕТА ССЫЛКИ С BASE64 (data:text/csv;base64...). СИСТЕМА САМА СОЗДАСТ ФАЙЛ ПРИ ВЫЗОВЕ ИНСТРУМЕНТА. В текстовом ответе просто скажи на русском, что файл готов.
 5. ФОТОГРАФИИ (АВТОМАТИЗАЦИЯ LensPerfect AI): Если пользователь загрузил фото товара для каталога, ТЫ ОБЯЗАНА вызвать инструмент \`process_product_image\` (передав индекс картинки) для подготовки чистой идеальной карточки. 
 ВАЖНО: При каждом вызове \`process_product_image\` ВСЕГДА передавай в аргумент 'prompt' следующий текст, чтобы нейросеть выровняла товар, убрала блики и разгладила складки: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare".
-Укажи в ответе пользователю на русском: "Изображение обработано LensPerfect AI: выровнено, без бликов и складок, добавлен белый студийный фон".`;
+        Укажи в ответе пользователю на русском: "Изображение обработано LensPerfect AI: выровнено, без бликов и складок, добавлен белый студийный фон".`;
+      } else if (department === Department.PASSEPARTOUT) {
+        deptContext += `\nТВОЯ РОЛЬ: Ты — Паспарту (Архивариус и Курьер). Твоя ЕДИНСТВЕННАЯ задача — брать прикрепленные к сообщению файлы и сохранять их в папку (используя инструмент \`save_to_inbox\`). Тебе строго запрещено делать что-либо еще или заниматься аналитикой. Сохраняй файлы, придумывая им осмысленные имена на основе того, о чем попросил Оркестратор. Если файлов несколько, вызови инструмент для каждого файла отдельно. В текстовом ответе просто скажи: "Файл успешно перемещен в папку."`;
       }
 
       let tools: any[] = [];
       if (department === Department.GENERAL) {
         // Master Orchestrator: can delegate, list files, create tasks.
         tools = [{ functionDeclarations: [delegateTaskTool, listDriveFilesTool, createTaskTool, listCalendarEventsTool, createCalendarEventTool, processProductImageTool] }];
-        deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. КРИТИЧЕСКИ ВАЖНО: В аргумент \`task_description\` передай МАКСИМАЛЬНО подробную инструкцию для Отдела, например: "ОБЯЗАТЕЛЬНО извлеки все товары из документа и запиши каждый отдельно в Таблицу функцией insert_into_sheet!". Нельзя делегировать пустой запрос. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя на РУССКОМ. \nОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
+        deptContext += `\nВНИМАНИЕ ОРКЕСТРАТОР: У тебя в подчинении есть Отделы (finance, inventor, wix, passepartout). Если запрос пользователя касается ИХ зоны ответственности — ты ОБЯЗАНА вызвать функцию delegate_task. КРИТИЧЕСКИ ВАЖНО: В аргумент \`task_description\` передай МАКСИМАЛЬНО подробную инструкцию для Отдела. Нельзя делегировать пустой запрос. Передай им всю информацию (фотографии и файлы прикрепятся к ним автоматически). Ты получишь их ответ в качестве результата вызова функции, после чего резюмируй его для пользователя на РУССКОМ.
+        ОЧЕНЬ ВАЖНО: Если пользователь просит ПРОСТО СОХРАНИТЬ в папку ИЛИ ПОЛОЖИТЬ в папку документы/файлы без необходимости их анализировать — немедленно делегируй эту задачу отделу passepartout (Паспарту). Обязательно передай в инструкциях, как назвать эти файлы.
+        ОЧЕНЬ ВАЖНО ПРО ФОТОГРАФИИ: Если пользователь просит "сделать красиво", "вырезать фон", "обработать фото" или "сделать для каталога" - ТЫ ДОЛЖНА НЕМЕДЛЕННО ВЫЗВАТЬ ФУНКЦИЮ \`process_product_image\`, НЕ ПЫТАЙСЯ ПРИДУМАТЬ ОТГОВОРКУ. У АПИ НЕТ СБОЕВ, ПРОСТО ВЫЗОВИ ИНСТРУМЕНТ \`process_product_image\` напрямую. ПРИ ВЫЗОВЕ ИНСТРУМЕНТА СТРОГО ОБЯЗАТЕЛЬНО передавать в аргумент 'prompt' следующий текст: "center the product perfectly, pure white background (#FFFFFF), soft natural shadow under the product, square format, remove wrinkles and glare"`;
       } else {
         // Sub-agents get specific execution tools
         const agentTools = [];
-        if (department === Department.FINANCE) agentTools.push(insertIntoSheetTool, createDriveFileTool, listCalendarEventsTool, createCalendarEventTool);
+        if (department === Department.FINANCE) agentTools.push(processReceiptBatchTool, createDriveFileTool, listCalendarEventsTool, createCalendarEventTool);
         else if (department === Department.INVENTOR || department === Department.DEVELOPMENT) agentTools.push(listDriveFilesTool, createDriveFileTool);
         else if (department === Department.WIX) agentTools.push(processProductImageTool, createDriveFileTool, generateCatalogCsvTool);
+        else if (department === Department.PASSEPARTOUT) agentTools.push(saveToInboxTool);
 
         if (agentTools.length > 0) {
           tools = [{ functionDeclarations: agentTools }];
