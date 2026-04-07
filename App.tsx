@@ -136,7 +136,7 @@ const App: React.FC = () => {
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
-    setIsAiOnline(!!process.env.API_KEY);
+    setIsAiOnline(!!import.meta.env.VITE_GEMINI_API_KEY);
     // Periodically check if drive access is actually working
     const checkDrive = async () => {
       const status = await driveService.verifyConnection();
