@@ -1,4 +1,3 @@
-
 import { Department } from "../types";
 
 const USER_SPECIFIED_FOLDER = '1NoVUjJ-_vH5amQjeWb0tW8V11eIiu5PN';
@@ -10,26 +9,32 @@ export class DriveService {
 
   constructor() {
     // 1. Try storage
-    const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (saved) {
-      this.accessToken = saved;
-      console.log("[DriveService] Restored token from storage");
-    } else if (HARDCODED_TOKEN) {
-      this.accessToken = HARDCODED_TOKEN;
-      localStorage.setItem(TOKEN_STORAGE_KEY, HARDCODED_TOKEN);
-      console.log("[DriveService] Used pre-configured token");
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (saved) {
+        this.accessToken = saved;
+        console.log("[DriveService] Restored token from storage");
+      } else if (HARDCODED_TOKEN) {
+        this.accessToken = HARDCODED_TOKEN;
+        localStorage.setItem(TOKEN_STORAGE_KEY, HARDCODED_TOKEN);
+        console.log("[DriveService] Used pre-configured token");
+      }
     }
   }
 
   setAccessToken(token: string) {
     this.accessToken = token;
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    }
     console.log("[DriveService] Access Token updated and saved");
   }
 
   disconnect() {
     this.accessToken = null;
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
     console.log("[DriveService] Disconnected and token cleared");
   }
 
@@ -119,7 +124,7 @@ export class DriveService {
     }
   }
 
-  async createFile(name: string, mimeType: string, base64Data?: string, folderId?: string): Promise<any> {
+  async createFile(name: string, mimeType: string, base64Data?: string): Promise<any> {
     if (!this.accessToken) {
       return { status: 'error', message: "Нет доступа к Drive. Не могу создать файл." };
     }
@@ -131,7 +136,7 @@ export class DriveService {
         const metadata = {
           name: name,
           mimeType: mimeType,
-          parents: [folderId || USER_SPECIFIED_FOLDER]
+          parents: [USER_SPECIFIED_FOLDER]
         };
 
         response = await fetch('https://www.googleapis.com/drive/v3/files', {
@@ -151,7 +156,7 @@ export class DriveService {
         const metadata = {
           name: name,
           mimeType: mimeType,
-          parents: [folderId || USER_SPECIFIED_FOLDER]
+          parents: [USER_SPECIFIED_FOLDER]
         };
 
         // Clean up base64 payload if it has data URL prefix

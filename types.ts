@@ -80,7 +80,7 @@ export interface Order {
   status: 'shipped' | 'processing' | 'delivered';
 }
 
-export type ViewMode = 'chat' | 'tasks' | 'integrations' | 'live' | 'analytics';
+export type ViewMode = 'chat' | 'tasks' | 'integrations' | 'live' | 'analytics' | 'bridge' | 'visual' | 'diary';
 
 export interface AppState {
   currentDepartment: Department;

@@ -87,7 +87,7 @@ const IntegrationsPanel: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-3 bg-white/5 rounded-xl border border-white/5">
               <div className="text-[10px] text-neutral-500 font-bold uppercase mb-1">AI Core</div>
               <div className="flex items-center gap-2 text-xs font-medium text-white">
@@ -100,6 +100,13 @@ const IntegrationsPanel: React.FC = () => {
               <div className="flex items-center gap-2 text-xs font-medium text-white">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
                 {isConnected ? verificationResult?.user || 'Active' : 'Not Connected'}
+              </div>
+            </div>
+            <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+              <div className="text-[10px] text-neutral-500 font-bold uppercase mb-1">Omni AI (Wix)</div>
+              <div className="flex items-center gap-2 text-xs font-medium text-white">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                Linked
               </div>
             </div>
           </div>

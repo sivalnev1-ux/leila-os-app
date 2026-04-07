@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Briefcase,
@@ -31,18 +30,18 @@ export const LEILA_SYSTEM_INSTRUCTION = `
 Местоположение: Израиль, Беэр-Шева (IST/UTC+3). Владелец бизнеса: Сергей.
 
 1. Основная цель: Обеспечить стабильный рост бизнеса, контроль финансов, автоматизацию процессов и подготовку к масштабированию продаж. Приоритет: Финансовая стабильность, Оборот и прибыль, Контроль ошибок.
-2. Управляемые модули системы: Finance Bot, Wix Catalog Bot, LensPerfect AI, Drive Finance System, Inventor. Ты ставишь задачи, модули выполняют.
+2. Управляемые модули системы: Gemini Live, Finance Bot, Omni AI (Wix Manager), Drive Finance System, Inventor. Ты ставишь задачи, модули выполняют.
 3. Финансовый контроль: Анализировать закупки, чеки, расходы. Работать с Google Drive. Предупреждать о рисках.
 4. Отчётность: Давать краткие управленческие отчеты, указывать риски, предлагать действия прагматично и без воды.
 5. Работа с документами: Анализировать новые накладные, передавать в Finance Bot. Ничего не выдумывать.
-6. Wix Catalog Management: Управлять наполнением сайта. Приоритет: Консервы, Корм, Наполнитель. Запрещено: дубли, кривые фото.
+6. Wix Catalog Management (Omni AI): Управлять наполнением сайта. Приоритет: Консервы, Корм, Наполнитель.
 
 ПРАВИЛА ПОВЕДЕНИЯ:
 - Строгий и управленческий тон, без фантазий и выдуманных данных.
 - Фокус на бизнес-результат и системность.
 - Решения принимаются владельцем (Сергей). Ты предлагаешь решения, финальное утверждение за ним.
-- ОБЯЗАТЕЛЬНО ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. ВЕСЬ ИНТЕРФЕЙС И ОТВЕТЫ ДОЛЖНЫ БЫТЬ СТРОГО НА РУССКОМ С СОХРАНЕНИЕМ ДЕЛОВОГО ТОНА.
-- ПОДТВЕРЖДЕНИЕ: После поручения заканчивай ответом: ✅ Задача принята: [суть], срок/статус: [результат].
+- ОСНОВНОЙ ЯЗЫК ОБЩЕНИЯ - РУССКИЙ. С Сергеем общайся только на РУССКОМ. Иврит используй только для поиска цен по Израилю или заполнения полей в Wix.
+- ПОДТВЕРЖДЕНИЕ: После поручения заканчивай ответом: ✅ МИССИЯ ПРИНЯТА: [суть], статус: [результат].
 - ИСПОЛЬЗОВАНИЕ ИНСТРУМЕНТОВ: Не вызывай поиск файлов, если не попросили ЯВНО.
 
 🔥 РЕЖИМ "ТВОРЧЕСКИЙ ПАРТНЕР" (СУПЕР-ВАЖНО):
@@ -58,7 +57,6 @@ export const TEAM_MEMBERS: Assignee[] = [
   { id: 'leila', name: 'Лейла (AI)', avatarLabel: 'L', color: 'bg-purple-600', avatarUrl: LEILA_AVATAR_URL },
   { id: 'alex', name: 'Алекс (Dev)', avatarLabel: 'A', color: 'bg-orange-600' },
   { id: 'maya', name: 'Майя (Creative)', avatarLabel: 'M', color: 'bg-pink-600' },
-  { id: 'passepartout', name: 'Паспарту (Архив)', avatarLabel: 'P', color: 'bg-teal-600' }
 ];
 
 export const DEPARTMENT_BOTS: BotMetadata[] = [
@@ -97,21 +95,10 @@ export const DEPARTMENT_BOTS: BotMetadata[] = [
     description: 'Техническая архитектура и код',
     icon: 'Code',
     color: 'bg-orange-500'
-  },
-  {
-    id: Department.PASSEPARTOUT,
-    name: 'Паспарту',
-    description: 'Архивариус',
-    icon: 'Briefcase',
-    color: 'bg-teal-600'
   }
 ];
 
 export const getBotIcon = (id: string, size = 20) => {
-  const bot = DEPARTMENT_BOTS.find(b => b.id === id);
-  // Note: We avoid returning an <img> here to prevent refetching/flicker in some contexts,
-  // instead allowing the caller to handle avatarUrl logic if available.
-
   switch (id) {
     case Department.FINANCE: return <TrendingUp size={size} />;
     case Department.ACCOUNTING: return <Calculator size={size} />;

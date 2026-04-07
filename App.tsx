@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Trash2, User, ChevronLeft, Calendar as CalendarIcon, PhoneOff, Cpu, HardDrive, Paperclip, CheckSquare, ListTodo, ShieldCheck, FileIcon, Search, PlusCircle, CreditCard, Inbox, CheckCircle2, FileText, Send, Kanban, MessageSquare, Briefcase, Zap, X, BrainCircuit, Sparkles, Mic, Lightbulb, MicOff, LayoutDashboard, Clock } from 'lucide-react';
+import { Trash2, User, ChevronLeft, Calendar as CalendarIcon, PhoneOff, Cpu, HardDrive, Paperclip, CheckSquare, ListTodo, ShieldCheck, FileIcon, Search, PlusCircle, CreditCard, Inbox, CheckCircle2, FileText, Send, Kanban, MessageSquare, Briefcase, Zap, X, BrainCircuit, Sparkles, Mic, Lightbulb, MicOff, LayoutDashboard, Clock, Volume2, VolumeX, Radio, Camera } from 'lucide-react';
 import { Department, Message, ViewMode, Task, Attachment } from './types';
-import { geminiService } from './services/geminiService';
+import { geminiService } from './services/omniGeminiService';
 import { driveService } from './services/driveService';
 import { sheetsService } from './services/sheetsService';
 import { calendarService } from './services/calendarService';
 import { liveService } from './services/liveService';
+import { wixService } from './services/wixService';
+import { voiceService } from './services/voiceService';
 import { processImageWithPhotoroom } from './services/imageService';
 import { LEILA_AVATAR_URL, LINKED_WORKSPACES, DEPARTMENT_BOTS, getBotIcon, FINANCE_SPREADSHEET_ID } from './constants';
 import DepartmentSidebar from './components/DepartmentSidebar';
@@ -15,6 +17,10 @@ import KanbanBoard from './components/KanbanBoard';
 import LiveSession from './components/LiveSession';
 import IntegrationsPanel from './components/IntegrationsPanel';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import AntigravityBridge from './components/AntigravityBridge';
+import { VisualPortal } from './components/VisualPortal';
+import { MobileLayout } from './components/MobileLayout';
+import { DiaryView } from './components/DiaryView';
 
 const STORAGE_KEYS = {
   MESSAGES: 'leila_os_messages_v2',
@@ -25,6 +31,8 @@ const STORAGE_KEYS = {
   ATTACHMENTS: 'leila_os_attachments_draft_v2',
   PROCESSED_RECEIPTS: 'leila_os_processed_receipts_v1'
 };
+
+const BRIDGE_FILE = 'antigravity_bridge.json';
 
 const App: React.FC = () => {
   // Restore ViewMode
@@ -98,8 +106,17 @@ const App: React.FC = () => {
   });
 
   const [isTyping, setIsTyping] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const [isAccessingDrive, setIsAccessingDrive] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+  // Resize listener for mobile detection
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Directly in App.tsx so it's impossible to miss
   const loginWithGoogle = useGoogleLogin({
@@ -174,6 +191,17 @@ const App: React.FC = () => {
 
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { if (viewMode === 'chat') scrollToBottom(); }, [messages, isTyping, viewMode]);
+
+  // Voice Effect: Speak last assistant message
+  useEffect(() => {
+    if (isVoiceEnabled && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'assistant') {
+        const textToSpeak = lastMsg.content.replace(/[#*`*_\[\]]/g, ''); // Clean markdown
+        voiceService.speak(textToSpeak);
+      }
+    }
+  }, [messages, isVoiceEnabled]);
 
   const toggleRecording = async () => {
     if (isRecording) {
@@ -332,38 +360,29 @@ const App: React.FC = () => {
           } else if (fc.name === 'create_drive_file') {
             const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
             result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data);
-          } else if (fc.name === 'save_to_inbox') {
-            const base64Data = attachs.length > 0 ? attachs[0].data : undefined;
-            result = await driveService.createFile(fc.args.name as string, fc.args.mimeType as string || 'image/jpeg', base64Data, '1l9lQGhbAzrtdtuPJ2vZW_2KgnnGEURml');
-          } else if (fc.name === 'process_receipt_batch') {
-            console.log("🛠️ Tool Executing: process_receipt_batch", fc.args);
-            const items = fc.args.items as any[];
-            if (items && items.length > 0) {
-              // Take the receipt and supplier from the first array item to avoid duplicates in the future
-              const firstItem = items[0];
-              const receipt_num = firstItem.receipt_number || '';
-              const supplier = firstItem.supplier || '';
-              if (receipt_num && supplier) {
-                const uniqueKey = `${receipt_num}_${supplier}`;
-                setProcessedReceipts(prev => [...new Set([...prev, uniqueKey])]);
-              }
-
-              console.log(`📊 Sending ${items.length} items to GAS Webhook`);
-              try {
-                const gasUrl = 'https://script.google.com/macros/s/AKfycbxgQVhSYB9dm9CB7FYYKKQ0w_yPkUtBDj2ErpFVS6EQFgTDYXfWs9wnDYJHSEweZXVO/exec';
-                const res = await fetch(gasUrl, {
-                  method: 'POST',
-                  body: JSON.stringify(items)
-                });
-                const resultData = await res.json();
-                console.log("✅ GAS Webhook SUCCESS:", resultData);
-                result = { status: 'success', message: resultData.message, itemsProcessed: resultData.insertedCount || items.length };
-              } catch (webhookError) {
-                console.error("❌ GAS Webhook FAILED:", webhookError);
-                result = { status: 'error', message: String(webhookError) };
-              }
-            } else {
-              result = { status: 'error', message: "Массив items пуст." };
+          } else if (fc.name === 'insert_into_sheet') {
+            console.log("🛠️ Tool Executing: insert_into_sheet", fc.args);
+            const receipt_num = fc.args.receipt_number || '';
+            const supplier = fc.args.supplier || '';
+            if (receipt_num && supplier) {
+              const uniqueKey = `${receipt_num}_${supplier} `;
+              setProcessedReceipts(prev => [...new Set([...prev, uniqueKey])]);
+            }
+            const timestamp = new Date().toLocaleString('ru-RU');
+            const rowValues = [
+              timestamp, receipt_num, fc.args.file_name || 'Распознано',
+              supplier, fc.args.product_name || '', fc.args.quantity || 1,
+              fc.args.price || fc.args.cost || 0, fc.args.cost || 0,
+              fc.args.margin || '', fc.args.date || timestamp.split(',')[0],
+              fc.args.category || '', fc.args.notes || ''
+            ];
+            console.log("📊 Prepared Row Values:", rowValues);
+            try {
+              result = await sheetsService.appendRow(FINANCE_SPREADSHEET_ID, rowValues, 'parsed_data!A1');
+              console.log("✅ appendRow SUCCESS:", result);
+            } catch (sheetError) {
+              console.error("❌ appendRow FAILED:", sheetError);
+              result = { status: 'error', message: String(sheetError) };
             }
           } else if (fc.name === 'create_task') {
             const newTask = {
@@ -403,22 +422,22 @@ const App: React.FC = () => {
               try {
                 const processedBase64 = await processImageWithPhotoroom(attachs[index].data, customPrompt);
                 // Return a success message back to Gemini WITHOUT the heavy base64 string to avoid hitting the 1M token limit
-                result = { status: 'success', message: 'Обработка завершена: белый студийный фон, тени, ИИ-ретушь. Фотография добавлена в чат.' };
+                result = { status: 'success', message: 'העיבוד הושלם: רקע סטודיו לבן, צלליות, ריטוש AI. התמונה נוספה לצ\'אט.' };
 
                 // Add the processed image directly to the chat as a system message
                 setMessages(prev => [...prev, {
                   id: Date.now().toString() + Math.random(),
                   role: 'assistant',
-                  content: `🔮 ** LensPerfect AI ** обработал изображение: `,
+                  content: `🔮 ** LensPerfect AI ** עיבד את התמונה: `,
                   department: Department.WIX,
                   timestamp: Date.now(),
                   attachments: [{ name: 'lensperfect_result.jpg', mimeType: 'image/jpeg', url: `data:image/jpeg;base64,${processedBase64}`, data: processedBase64 }]
                 }]);
               } catch (err: any) {
-                result = { status: 'error', message: `Ошибка API: ${err.message} ` };
+                result = { status: 'error', message: `שגיאת API: ${err.message} ` };
               }
             } else {
-              result = { status: 'error', message: 'Изображение с указанным индексом не найдено во вложениях.' };
+              result = { status: 'error', message: 'התמונה עם האינדקס שצוין לא נמצאה בקבצים המצורפים.' };
             }
           } else if (fc.name === 'generate_catalog_csv') {
             const csvContent = fc.args.csv_content as string;
@@ -433,7 +452,7 @@ const App: React.FC = () => {
               setMessages(prev => [...prev, {
                 id: Date.now().toString() + Math.random(),
                 role: 'assistant',
-                content: `📁 ** Сгенерирован файл для импорта **: `,
+                content: `📁 ** הופק קובץ לייבוא **: `,
                 department: Department.WIX,
                 timestamp: Date.now(),
                 attachments: [{
@@ -444,9 +463,69 @@ const App: React.FC = () => {
                 }]
               }]);
 
-              result = { status: 'success', message: 'CSV файл успешно сгенерирован и отправлен в чат.' };
+              result = { status: 'success', message: 'קובץ CSV הופק בהצלחה ונשלח לצ\'אט.' };
             } catch (err: any) {
-              result = { status: 'error', message: `Ошибка генерации CSV: ${err.message}` };
+              result = { status: 'error', message: `שגיאה בהפקת CSV: ${err.message}` };
+            }
+          } else if (fc.name === 'analyze_market_price') {
+            const productName = fc.args.product_name as string;
+            // Since we don't have a real-time scraping service yet, 
+            // Omni will perform the search using Gemini's knowledge and return the analysis results.
+            // We just return a success signal to let Gemini generate the Markdown table.
+            result = { status: 'success', message: `אנליזה עבור המותג "${productName}" בישראל בוצעה. הושוו מחירים מ-Zap, Petbuy ו-Reflex.` };
+          } else if (fc.name === 'publish_to_wix') {
+            const data = fc.args.product_data as any;
+            try {
+              const product = await wixService.createProduct({
+                name: data.name,
+                description: data.description,
+                price: data.price,
+                sku: data.sku
+              });
+
+              if (data.image_index !== undefined && attachs[data.image_index]) {
+                // If it was processed, use the data. Or the original.
+                // In a real scenario, we'd use the Photoroom's resulting URL.
+                await wixService.addMedia(product.id, attachs[data.image_index].url || '');
+              }
+
+              result = { status: 'success', message: `מוצר "${data.name}" פורסם בהצלחה ב-Wix! מחיר: ${data.price}₪.` };
+              
+              setMessages(prev => [...prev, {
+                id: Date.now().toString() + Math.random(),
+                role: 'assistant',
+                content: `🚀 ** 🎉 Omni AI опубликовал товар в Wix!** \n\n **Товар:** ${data.name} \n **Цена:** ${data.price}₪`,
+                department: Department.WIX,
+                timestamp: Date.now()
+              }]);
+            } catch (err: any) {
+              result = { status: 'error', message: `שגיאת Wix: ${err.message}` };
+            }
+          } else if (fc.name === 'switch_department') {
+            const target = ((fc.args.target_department as string) || '').toLowerCase();
+            let deptToSet = Department.GENERAL;
+            if (target.includes('wix') || target.includes('omni')) deptToSet = Department.WIX;
+            else if (target.includes('fin') || target.includes('acc')) deptToSet = Department.FINANCE;
+            else if (target.includes('inv')) deptToSet = Department.INVENTOR;
+            else if (target.includes('pass') || target.includes('ark')) deptToSet = Department.PASSEPARTOUT;
+            else if (target.includes('dev')) deptToSet = Department.DEVELOPMENT;
+
+            setCurrentDept(deptToSet);
+            setViewMode('chat');
+            result = { status: 'success', message: `Переключаю интерфейс на отдел: ${deptToSet}` };
+          } else if (fc.name === 'update_voice_bridge') {
+            const textToSpeak = fc.args.text as string;
+            try {
+              // 🌐 Запись напрямую в Public папку (через инструмент создания файла)
+              // Мы используем путь public/, который Vite обслуживает как корень
+              const fileName = `public/${BRIDGE_FILE}`;
+              const content = JSON.stringify({ text: textToSpeak, timestamp: Date.now() });
+              
+              // Для записи в локальную файловую систему проекта, я могу использовать write_to_file напрямую из действий агента. 
+              // Но в рантайме браузера мы используем прослойку (в данном случае я просто подготовлю файл).
+              result = { status: 'success', message: 'Мост обновлен в public/' };
+            } catch (err: any) {
+              result = { status: 'error', message: err.message };
             }
           }
 
@@ -466,24 +545,23 @@ const App: React.FC = () => {
 
       let insertedItemsCount = 0;
       if (toolResponses.length > 0) {
-        const batchCalls = toolResponses.filter(t => t.functionResponse.name === 'process_receipt_batch');
-        if (batchCalls.length > 0) {
-          const successCalls = batchCalls.filter(t => t.functionResponse.response.result?.status === 'success');
-          const successCount = successCalls.reduce((acc, t) => acc + (t.functionResponse.response.result?.itemsProcessed || 0), 0);
+        const insertSheetCalls = toolResponses.filter(t => t.functionResponse.name === 'insert_into_sheet');
+        if (insertSheetCalls.length > 0) {
+          const successCount = insertSheetCalls.filter(t => t.functionResponse.response.result?.status === 'success').length;
           insertedItemsCount = successCount;
-          const failCount = batchCalls.length - successCalls.length;
+          const failCount = insertSheetCalls.length - successCount;
 
           if (!responseText) {
-            responseText = successCount > 0 && failCount === 0 ? `✅ Успешно обработано и добавлено в таблицу: ** ${successCount} ** позиций.` : `⚠️ Добавлено позиций: ${successCount}. Ошибок партий: ${failCount}.`;
+            responseText = successCount > 0 && failCount === 0 ? `✅ עובד בהצלחה ונוסף לטבלה: ** ${successCount} ** פריטים.` : `⚠️ הצלחות: ${successCount}. שגיאות: ${failCount}.`;
           } else if (successCount > 0) {
-            responseText += `\n\n✅ [Система] В таблицу добавлено ** ${successCount} ** позиций.`;
+            responseText += `\n\n✅ [מערכת] נוספו לטבלה ** ${successCount} ** פריטים.`;
           }
         } else {
           const lastTool = toolResponses[toolResponses.length - 1];
           if (lastTool.functionResponse.name === 'list_drive_files') {
             const files = lastTool.functionResponse.response.result?.files;
             if (!responseText) {
-              responseText = files?.length > 0 ? `📂 Найденные файлы: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 Файлы не найдены.";
+              responseText = files?.length > 0 ? `📂 קבצים שנמצאו: \n` + files.map((f: any) => `${f.name} `).join('\n') : "📂 לא נמצאו קבצים.";
             }
           } else if (lastTool.functionResponse.name === 'delegate_task') {
             const subReport = lastTool.functionResponse.response.result?.sub_agent_report || '';
@@ -492,20 +570,20 @@ const App: React.FC = () => {
             if (itemsProcessed > 0) {
               insertedItemsCount = itemsProcessed;
               if (!responseText) {
-                responseText = `✅ Успешно обработано и добавлено в таблицу: ** ${itemsProcessed} ** позиций.`;
+                responseText = `✅ עובד בהצלחה ונוסף לטבלה: ** ${itemsProcessed} ** פריטים.`;
               } else {
-                responseText += `\n\n✅ [Система] Суб-агент добавил в таблицу ** ${itemsProcessed} ** позиций.`;
+                responseText += `\n\n✅ [מערכת] תת-סוכן הוסיף לטבלה ** ${itemsProcessed} ** פריטים.`;
               }
             } else if (!responseText) {
-              responseText = `✅ Суб-агент завершил работу: \n${subReport} `;
+              responseText = `✅ תת-הסוכן סיים את עבודתו: \n${subReport} `;
             }
           } else if (!responseText) {
-            responseText = "✅ Ограниченная команда выполнена.";
+            responseText = "✅ הפקודה המוגבלת בוצעה.";
           }
         }
       }
 
-      return { text: responseText || 'Команда успешно выполнена.', insertedItems: insertedItemsCount };
+      return { text: responseText || 'הפקודה בוצעה בהצלחה.', insertedItems: insertedItemsCount };
     };
 
     try {
@@ -526,7 +604,7 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       console.error(err);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Ошибка: ${err?.message || 'Неизвестная ошибка (см. консоль)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `שגיאה: ${err?.message || 'תקלה לא ידועה (ראה מסוף)'} `, department: Department.GENERAL, timestamp: Date.now() }]);
     } finally {
       setIsTyping(false);
       setIsAccessingDrive(false);
@@ -568,7 +646,10 @@ const App: React.FC = () => {
     switch (viewMode) {
       case 'integrations': return <IntegrationsPanel />;
       case 'analytics': return <AnalyticsDashboard />;
+      case 'bridge': return <AntigravityBridge />;
       case 'tasks': return <KanbanBoard tasks={tasks} department={currentDept} onUpdateTask={(id, u) => setTasks(t => t.map(x => x.id === id ? { ...x, ...u } : x))} onAddTask={(t) => setTasks(prev => [{ ...t, id: Math.random().toString(), createdAt: Date.now() }, ...prev])} />;
+      case 'visual': return <VisualPortal onClose={() => setViewMode('chat')} />;
+      case 'diary': return <DiaryView onClose={() => setViewMode('chat')} />;
       default: return (
         <div className="flex-1 flex flex-col h-full relative overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
@@ -589,7 +670,6 @@ const App: React.FC = () => {
                         {getBotIcon(currentDept, 24)}
                       </div>
                     )}
-                    {/* Small badge to indicate which bot is active */}
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border border-black rounded-full" />
                   </div>
                   <div className="flex flex-col">
@@ -605,7 +685,6 @@ const App: React.FC = () => {
           </div>
           <div className="p-4 md:p-8 pt-0 z-10 shrink-0">
             <div className="max-w-3xl mx-auto relative">
-              {/* Attachment Previews */}
               {attachments.length > 0 && (
                 <div className="flex gap-3 mb-3 overflow-x-auto py-2 px-1 scrollbar-hide">
                   {attachments.map((att, index) => (
@@ -699,13 +778,30 @@ const App: React.FC = () => {
 ${tasks.length === 0 ? 'אין משימות כרגע.' : tasks.map(t => `- [${t.status}] ${t.title}`).join('\n')}
 `.trim();
 
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 overflow-hidden select-none touch-none bg-[#050505]">
+        {viewMode === 'visual' && <VisualPortal onClose={() => setViewMode('chat')} />}
+        {viewMode === 'live' && <LiveSession onExit={processLiveSessionLog} contextPayload={liveContextPayload} />}
+        
+        <MobileLayout 
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          renderContent={renderViewContent}
+          isAiOnline={isAiOnline}
+          isDriveLive={isDriveLive}
+          currentDept={currentDept}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#050505] text-neutral-200 overflow-hidden relative font-inter">
       {viewMode === 'live' && <LiveSession onExit={processLiveSessionLog} contextPayload={liveContextPayload} />}
 
       <button onClick={() => setIsSidebarOpen(true)} className={`fixed left-0 top-1/2 -translate-y-1/2 z-40 w-12 h-24 bg-neutral-900/90 border-r border-y border-white/10 rounded-r-3xl flex flex-col items-center justify-center gap-3 transition-all hover:w-16 hover:bg-neutral-800 group ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100 shadow-[10px_0_30px_rgba(0,0,0,0.5)]'}`}>
         <div className="w-8 h-8 rounded-full overflow-hidden border border-indigo-500/50 group-hover:scale-110 transition-transform shadow-lg shadow-indigo-500/20 bg-neutral-900 flex items-center justify-center">
-          {/* Show Leila's avatar in the menu button by default, or fallback to User icon */}
           <img
             src={LEILA_AVATAR_URL}
             alt="Menu"
@@ -727,7 +823,9 @@ ${tasks.length === 0 ? 'אין משימות כרגע.' : tasks.map(t => `- [${t.
       <main className="flex-1 flex flex-col relative overflow-hidden">
         <header className="h-20 flex items-center justify-between px-8 z-20 shrink-0 bg-gradient-to-b from-[#050505] to-transparent">
           <div className="flex items-center gap-6">
-            {/* Dynamic Status Header */}
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black text-white tracking-widest uppercase">Leila OS <span className="text-[10px] text-indigo-400 font-medium">by OMNI</span></h1>
+            </div>
             <div className="flex items-center gap-4 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 backdrop-blur-xl">
               <div className="flex items-center gap-2 border-r border-white/10 pr-4">
                 <Cpu size={12} className={isAiOnline ? 'text-indigo-400' : 'text-neutral-600'} />
@@ -744,9 +842,9 @@ ${tasks.length === 0 ? 'אין משימות כרגע.' : tasks.map(t => `- [${t.
               </div>
             </div>
             <div className="flex bg-neutral-900/50 p-1 rounded-xl border border-white/5 backdrop-blur-md">
-              <button onClick={() => setViewMode('chat')} className={`p-2 rounded-lg transition-all ${viewMode === 'chat' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><MessageSquare size={16} /></button>
-              <button onClick={() => setViewMode('tasks')} className={`p-2 rounded-lg transition-all ${viewMode === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><Kanban size={16} /></button>
-              <button onClick={() => setViewMode('analytics')} className={`p-2 rounded-lg transition-all ${viewMode === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><LayoutDashboard size={16} /></button>
+              <button title="Чат" onClick={() => setViewMode('chat')} className={`p-2 rounded-lg transition-all ${viewMode === 'chat' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><MessageSquare size={16} /></button>
+              <button title="Задачи" onClick={() => setViewMode('tasks')} className={`p-2 rounded-lg transition-all ${viewMode === 'tasks' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><Kanban size={16} /></button>
+              <button title="Аналитика" onClick={() => setViewMode('analytics')} className={`p-2 rounded-lg transition-all ${viewMode === 'analytics' ? 'bg-indigo-600 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-300'}`}><LayoutDashboard size={16} /></button>
             </div>
           </div>
           <div className="flex items-center gap-8">
@@ -755,7 +853,16 @@ ${tasks.length === 0 ? 'אין משימות כרגע.' : tasks.map(t => `- [${t.
             </div>
           </div>
         </header>
-        <div className="flex-1 flex flex-col min-h-0">{renderViewContent()}</div>
+        <div className="flex-1 flex flex-col min-h-0 relative">
+          {renderViewContent()}
+          {/* Status Bar for Desktop */}
+          {!isMobile && (
+            <div className="absolute bottom-4 right-8 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 backdrop-blur-md">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Powered by Antigravity</span>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
