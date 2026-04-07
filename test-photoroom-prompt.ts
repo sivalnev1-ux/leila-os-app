@@ -1,4 +1,4 @@
-import { geminiService } from './services/geminiService';
+import { geminiService } from './services/omniGeminiService';
 import { Department } from './types';
 
 // Inject key before initialization
