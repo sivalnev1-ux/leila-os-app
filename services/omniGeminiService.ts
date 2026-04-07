@@ -1,4 +1,3 @@
-// Fix: rename for build compatibility
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { LEILA_SYSTEM_INSTRUCTION } from "../constants";
 import { Department, Attachment } from "../types";
