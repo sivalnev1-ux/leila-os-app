@@ -6,8 +6,8 @@ export class WixService {
   private readonly apiKey: string;
 
   constructor() {
-    this.siteId = process.env.VITE_WIX_SITE_ID || '94397af6-2765-4927-babb-c2478755f45a';
-    this.apiKey = process.env.VITE_WIX_API_KEY || '';
+    this.siteId = import.meta.env.VITE_WIX_SITE_ID || '94397af6-2765-4927-babb-c2478755f45a';
+    this.apiKey = import.meta.env.VITE_WIX_API_KEY || '';
   }
 
   private getHeaders() {
