@@ -6,27 +6,24 @@ import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
 if ("serviceWorker" in navigator) {
-  registerSW({ immediate: true });
+    registerSW({ immediate: true });
 }
 
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'not-configured-placeholder';
 
-console.log("Leila OS: Initializing Core...", { hasGoogleId: !!clientId });
+console.log("Leila OS: Initializing Core...", { hasGoogleId: clientId !== 'not-configured-placeholder' });
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+    throw new Error("Could not find root element to mount to");
 }
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
-    {clientId ? (
-      <GoogleOAuthProvider clientId={clientId}>
-        <App />
-      </GoogleOAuthProvider>
-    ) : (
-      <App />
-    )}
-  </React.StrictMode>
+    <React.StrictMode>
+        <GoogleOAuthProvider clientId={clientId}>
+              <App />
+        </GoogleOAuthProvider>
+    </React.StrictMode>
+  )
 );
