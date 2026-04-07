@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { liveService } from '../services/liveService';
-import { geminiService } from '../services/geminiService';
+import { geminiService } from '../services/omniGeminiService';
 import { Mic, MicOff, PhoneOff, Sparkles, Brain, Volume2, VolumeX, Activity, User, Ear } from 'lucide-react';
 import { LEILA_AVATAR_URL } from '../constants';
 
