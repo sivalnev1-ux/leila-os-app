@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { LEILA_SYSTEM_INSTRUCTION } from "../constants";
 import { Department, Attachment } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY || '' });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
 
 const listDriveFilesTool: FunctionDeclaration = {
     name: 'list_drive_files',
