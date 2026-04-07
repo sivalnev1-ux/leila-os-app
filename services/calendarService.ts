@@ -32,23 +32,18 @@ class CalendarService {
         }
 
         try {
-            const isDateOnly = date.length === 10; // e.g. "2024-03-15"
-            const event: any = {
-                summary,
-                description,
-            };
+            const isDateOnly = date.length === 10;
+            const event: any = { summary, description };
 
             if (isDateOnly) {
                 event.start = { date: date };
-                // For all day events, end date is exclusive, so add 1 day
                 const endDay = new Date(date);
                 endDay.setDate(endDay.getDate() + 1);
                 event.end = { date: endDay.toISOString().split('T')[0] };
             } else {
-                // Assume full datetime
                 event.start = { dateTime: date };
                 const endDate = new Date(date);
-                endDate.setHours(endDate.getHours() + 1); // Default 1 hr
+                endDate.setHours(endDate.getHours() + 1);
                 event.end = { dateTime: endDate.toISOString() };
             }
 
@@ -63,7 +58,7 @@ class CalendarService {
                 throw new Error(`Calendar API Error: ${JSON.stringify(err)}`);
             }
             const data = await response.json();
-            return { success: true, eventLink: data.htmlLink, message: `Событие "${summary}" успешно создано в календаре.` };
+            return { success: true, eventLink: data.htmlLink, message: `Событие "${summary}" успешно создано.` };
         } catch (error: any) {
             console.error("Error creating calendar event:", error);
             return { success: false, message: error.message };
