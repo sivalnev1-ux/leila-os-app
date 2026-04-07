@@ -1,9 +1,5 @@
 import axios from 'axios';
 
-/**
- * Omni AI: Wix Integration Service (Live Version)
- * Handles product creation and media uploads for Bonnie Market.
- */
 export class WixService {
   private readonly baseUrl = 'https://www.wixapis.com/stores/v1';
   private readonly siteId: string;
