@@ -9,6 +9,8 @@ if ("serviceWorker" in navigator) {
   registerSW({ immediate: true });
 }
 
+// Always provide a clientId to avoid GoogleOAuthProvider errors
+// Fallback to empty string which satisfies the prop type but might log a warning
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 console.log("Leila OS: Initializing Core...", { hasGoogleId: !!clientId });
@@ -21,13 +23,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    {clientId ? (
-      <GoogleOAuthProvider clientId={clientId}>
-        <App />
-      </GoogleOAuthProvider>
-    ) : (
+    <GoogleOAuthProvider clientId={clientId}>
       <App />
-    )}
+    </GoogleOAuthProvider>
   </React.StrictMode>
 );
-// Final verification for core initialization
