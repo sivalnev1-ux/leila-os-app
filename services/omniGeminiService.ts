@@ -215,9 +215,7 @@ const switchDepartmentTool: FunctionDeclaration = {
 export class GeminiService {
     getOrchestratorConfig() {
         return {
-            systemInstruction: LEILA_SYSTEM_INSTRUCTION + `\n🛑 КРИТИЧЕСКОЕ ПРАВИЛО ЯЗЫКА: ОБЩАЙСЯ С СЕРГЕЕМ (USER) ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
-🛑 ПРАВИЛО "АТТАСИ": Если слышишь команду "Аттаси" или "Отставить" — немедленно отменяй текущую операцию.
-🛑 КИБЕР-ПОРТАЛ: В КОНЦЕ КАЖДОГО СВОЕГО ОТВЕТА ВЫЗЫВАЙ update_voice_bridge(text="Твой ответ здесь"), чтобы Сергей слышал тебя на телефоне.`,
+            systemInstruction: LEILA_SYSTEM_INSTRUCTION + "\n🛑 КРИТИЧЕСКОЕ ПРАВИЛО ЯЗЫКА: ОБЩАЙСЯ С СЕРГЕЕМ (USER) ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.\n🛑 ПРАВИЛО \"АТТАСИ\": Если слышишь команду \"Аттаси\" или \"Отставить\" — немедленно отменяй текущую операцию.\n🛑 КИБЕР-ПОРТАЛ: В КОНЦЕ КАЖДОГО СВОЕГО ОТВЕТА ВЫЗЫВАЙ update_voice_bridge(text=\"Твой ответ здесь\"), чтобы Сергей слышал тебя на телефоне.",
             tools: [{ functionDeclarations: [delegateTaskTool, switchDepartmentTool, updateVoiceBridgeTool, listDriveFilesTool, createTaskTool, listCalendarEventsTool, createCalendarEventTool, processProductImageTool] }]
         };
     }
@@ -231,9 +229,7 @@ export class GeminiService {
     ) {
         try {
             const modelName = department === Department.INVENTOR ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
-            let deptContext = `\nЯЗЫКОВОЕ ПРАВИЛО: ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
-🛑 КИБЕР-ПОРТАЛ: ВСЕГДА В КОНЦЕ ВЫЗЫВАЙ update_voice_bridge.
-CURRENT CONTEXT: Department ${department}. Role: AI Assistant for Sergey.`;
+            let deptContext = "\nЯЗЫКОВОЕ ПРАВИЛО: ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.\n🛑 КИБЕР-ПОРТАЛ: ВСЕГДА В КОНЦЕ ВЫЗЫВАЙ update_voice_bridge.\nCURRENT CONTEXT: Department ${department}. Role: AI Assistant for Sergey.";
 
             const agentTools = [];
             if (department === Department.FINANCE) agentTools.push(processReceiptBatchTool, createDriveFileTool, listCalendarEventsTool, createCalendarEventTool, updateVoiceBridgeTool);
