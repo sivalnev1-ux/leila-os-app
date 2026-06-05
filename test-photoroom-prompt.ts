@@ -1,10 +1,9 @@
 import { geminiService } from './services/omniGeminiService';
 import { Department } from './types';
 
-// Inject key before initialization
-process.env.API_KEY = "AIzaSyBlJ3IH_7AIhstt4VXKMxhfrMbmR0Z7SXQ";
-geminiService['ai'] = new (require('@google/genai').GoogleGenAI)({ apiKey: process.env.API_KEY });
-
+// API key must be set via GEMINI_API_KEY environment variable
+if (!process.env.GEMINI_API_KEY) { console.error('GEMINI_API_KEY not set'); process.exit(1); }
+geminiService['ai'] = new (require('@google/genai').GoogleGenAI)({ apiKey: process.env.GEMINI_API_KEY });
 
 const dummyImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQYV2NgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=";
 
