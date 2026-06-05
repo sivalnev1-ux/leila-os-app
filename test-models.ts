@@ -1,7 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 
 async function run() {
-    const ai = new GoogleGenAI({ apiKey: "AIzaSyBlJ3IH_7AIhstt4VXKMxhfrMbmR0Z7SXQ" });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) { console.error('GEMINI_API_KEY not set'); return; }
+    const ai = new GoogleGenAI({ apiKey });
     try {
         let pageToken;
         do {
