@@ -1,6 +1,8 @@
 async function run() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) { console.error('GEMINI_API_KEY not set'); return; }
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyBlJ3IH_7AIhstt4VXKMxhfrMbmR0Z7SXQ`);
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         const data = await response.json();
         console.log("AVAILABLE MODELS:");
         if (data.models) {
